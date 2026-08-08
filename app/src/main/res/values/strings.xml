@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">流体胶囊</string>
+    <string name="notification_listener_label">流体胶囊通知读取</string>
+    <string name="accessibility_service_label">流体胶囊后台保活</string>
+    <string name="accessibility_service_description">仅用于提高通知监听和胶囊更新的后台存活能力，不读取屏幕内容或执行自动点击。</string>
+</resources>

@@ -1,0 +1,24 @@
+.gradle/
+.idea/
+local.properties
+build/
+app/build/
+*.iml
+.DS_Store
+
+# Obsidian local UI/session state
+.obsidian/
+
+# Private research vault notes. Public documentation lives in docs/.
+[0-9][0-9] *.md
+
+# Local mobile UI grounding traces and screenshots
+runs/
+
+# Signing material and packaged binaries must never enter source control
+*.apk
+*.aab
+*.jks
+*.keystore
+*.pem
+*.key
