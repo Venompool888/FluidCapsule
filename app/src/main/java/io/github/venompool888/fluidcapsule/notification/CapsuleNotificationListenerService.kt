@@ -16,9 +16,11 @@ import io.github.venompool888.fluidcapsule.integration.KnownNotificationAdapter
 import io.github.venompool888.fluidcapsule.integration.KnownNotificationDecision
 import io.github.venompool888.fluidcapsule.parser.OtpParseResult
 import io.github.venompool888.fluidcapsule.parser.OtpParser
+import io.github.venompool888.fluidcapsule.parser.OtpPresentationFormatter
 import io.github.venompool888.fluidcapsule.publisher.CapsuleCoordinator
 import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
 import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
+import io.github.venompool888.fluidcapsule.settings.AppRuleStore
 import io.github.venompool888.fluidcapsule.settings.UserSettings
 import java.util.concurrent.Executors
 
@@ -30,7 +32,8 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         DiagnosticsStore.markListenerConnected(this, true)
-        val recentCutoff = System.currentTimeMillis() - QUEUE_RETENTION_MILLIS
+        val recentCutoff = System.currentTimeMillis() -
+            UserSettings.capsuleDisplayDurationMillis(this)
         val currentNotifications = runCatching { activeNotifications.orEmpty().toList() }
             .getOrDefault(emptyList())
         historyExecutor.execute {
@@ -95,9 +98,16 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
 
         DiagnosticsStore.markNotificationSeen(this, sbn.packageName)
         val normalized = NotificationNormalizer.normalize(sbn)
-        if (recordHistory && UserSettings.notificationHistoryEnabled(this)) {
+        val appRule = AppRuleStore.get(this, sbn.packageName)
+        val shouldRecordHistory = recordHistory &&
+            UserSettings.notificationHistoryEnabled(this) && appRule.recordHistory
+        if (shouldRecordHistory) {
             historyExecutor.execute {
                 NotificationHistoryStore.record(applicationContext, normalized)
+                NotificationHistoryStore.purgeOlderThanDays(
+                    applicationContext,
+                    UserSettings.notificationHistoryRetentionDays(applicationContext),
+                )
             }
         }
         val defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(this)
@@ -105,13 +115,26 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         val isWhitelisted = NotificationWhitelist.contains(this, sbn.packageName)
         if (!isDefaultSms && !isWhitelisted) {
             DiagnosticsStore.markParse(this, "SKIPPED_NOT_WHITELISTED")
+            recordDecision(shouldRecordHistory, normalized.notificationKey, "SKIPPED", "未加入通知岛白名单")
             return
         }
 
         if (normalized.isGroupSummary || normalized.combinedText.isBlank()) {
             DiagnosticsStore.markParse(this, "SKIPPED_EMPTY_OR_GROUP_SUMMARY")
+            recordDecision(shouldRecordHistory, normalized.notificationKey, "SKIPPED", "群组摘要或通知正文为空")
             return
         }
+        val ruleMatch = appRule.matches(normalized.combinedText)
+        if (!ruleMatch.matches) {
+            DiagnosticsStore.markParse(this, "SKIPPED_APP_RULE")
+            recordDecision(shouldRecordHistory, normalized.notificationKey, "FILTERED", ruleMatch.detail)
+            return
+        }
+        val appLabel = runCatching {
+            packageManager.getApplicationLabel(
+                packageManager.getApplicationInfo(normalized.packageName, 0),
+            ).toString()
+        }.getOrDefault(normalized.packageName)
         // Parse only the currently displayed message. Aggregated text can contain the
         // conversation title and stale MessagingStyle messages, which must never become
         // OTP candidates for the latest notification.
@@ -119,15 +142,21 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
             is OtpParseResult.Success -> {
                 DiagnosticsStore.markParse(this, "OTP_SUCCESS_${result.confidence}")
                 val now = System.currentTimeMillis()
-                val ttlMinutes = result.validForMinutes?.coerceIn(1, 30) ?: 5
+                val ttlMinutes = appRule.ttlMinutes.takeIf { it > 0 }
+                    ?: result.validForMinutes?.coerceIn(1, 30)
+                    ?: 5
                 val showDirectly = UserSettings.showOtpDirectly(this)
+                val presentation = OtpPresentationFormatter.format(appLabel, normalized.title)
                 PublisherRouter.publish(
                     this,
                     CapsuleEvent(
                         sourcePackage = normalized.packageName,
+                        sourceLabel = presentation.sourceLabel,
+                        sourceSmallIcon = normalized.smallIcon,
+                        sourceLargeIcon = normalized.largeIcon ?: normalized.senderIcon,
                         eventId = normalized.notificationKey,
                         kind = CapsuleKind.OTP,
-                        title = "验证码",
+                        title = presentation.title,
                         shortText = result.code,
                         body = if (result.validForMinutes != null) {
                             "${result.validForMinutes} 分钟内有效 · 点击复制"
@@ -139,7 +168,14 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
                         createdAtMillis = now,
                         expiresAtMillis = now + ttlMinutes * 60_000L,
                         dedupeKey = "${normalized.packageName}:${result.code}",
+                        priorityAdjustment = appRule.priority,
                     ),
+                )
+                recordDecision(
+                    shouldRecordHistory,
+                    normalized.notificationKey,
+                    "PUBLISHED",
+                    "验证码识别成功并已提交到流体云",
                 )
                 return
             }
@@ -152,29 +188,39 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         if (!isWhitelisted) return
         if (NotificationWhitelist.isOtpOnly(this, normalized.packageName)) {
             DiagnosticsStore.markParse(this, "SKIPPED_OTP_ONLY_NON_OTP")
+            recordDecision(
+                shouldRecordHistory,
+                normalized.notificationKey,
+                "FILTERED",
+                "已开启仅验证码上云，但本条未识别出可靠验证码",
+            )
             return
         }
 
         val now = System.currentTimeMillis()
-        val showContent = UserSettings.showWhitelistContent(this)
+        val showContent = AppRuleStore.showContent(this, normalized.packageName)
         when (val decision = KnownNotificationAdapter.adapt(this, normalized, showContent, now)) {
             is KnownNotificationDecision.Publish -> {
                 DiagnosticsStore.markParse(this, "KNOWN_APP_${normalized.packageName}")
-                PublisherRouter.publish(this, decision.event)
+                PublisherRouter.publish(
+                    this,
+                    decision.event.copy(
+                        expiresAtMillis = now + AppRuleStore.effectiveTtlMinutes(this, normalized.packageName) * 60_000L,
+                        body = decision.event.body.take(appRule.maxBodyChars),
+                        priorityAdjustment = appRule.priority,
+                    ),
+                )
+                recordDecision(shouldRecordHistory, normalized.notificationKey, "PUBLISHED", "专属适配器已提交到流体云")
                 return
             }
             KnownNotificationDecision.Suppress -> {
                 DiagnosticsStore.markParse(this, "KNOWN_APP_SUPPRESSED_${normalized.packageName}")
+                recordDecision(shouldRecordHistory, normalized.notificationKey, "FILTERED", "专属适配器判断无需显示")
                 return
             }
             null -> Unit
         }
 
-        val appLabel = runCatching {
-            packageManager.getApplicationLabel(
-                packageManager.getApplicationInfo(normalized.packageName, 0),
-            ).toString()
-        }.getOrDefault(normalized.packageName)
         val displayTitle = normalized.title
             .takeIf { it.isNotBlank() && !it.equals(appLabel, ignoreCase = true) }
             ?: appLabel
@@ -197,7 +243,7 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
                     }
                     ?: "有新通知"
             }
-            .take(220)
+            .take(appRule.maxBodyChars)
         val rankingFeatures = rankingFeatures(rankingMap, normalized.notificationKey)
         val sourceActions = (normalized.actions + rankingFeatures.smartActions)
             .distinctBy { "${it.semanticAction}:${it.title}" }
@@ -223,10 +269,19 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
                     ?: CapsuleAction.None,
                 privacy = if (showContent) CapsulePrivacy.SHOW_FULL else CapsulePrivacy.HIDE_SENSITIVE,
                 createdAtMillis = now,
-                expiresAtMillis = now + QUEUE_RETENTION_MILLIS,
+                expiresAtMillis = now + AppRuleStore.effectiveTtlMinutes(this, normalized.packageName) * 60_000L,
                 dedupeKey = normalized.notificationKey,
+                priorityAdjustment = appRule.priority,
             ),
         )
+        recordDecision(shouldRecordHistory, normalized.notificationKey, "PUBLISHED", "白名单规则通过并已提交到流体云")
+    }
+
+    private fun recordDecision(enabled: Boolean, key: String, decision: String, detail: String) {
+        if (!enabled) return
+        historyExecutor.execute {
+            NotificationHistoryStore.updateDecision(applicationContext, key, decision, detail)
+        }
     }
 
     private fun rankingFeatures(rankingMap: RankingMap, key: String): RankingFeatures {
@@ -247,8 +302,4 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         val smartReplies: List<String> = emptyList(),
         val smartActions: List<Notification.Action> = emptyList(),
     )
-
-    companion object {
-        private const val QUEUE_RETENTION_MILLIS = 5 * 60_000L
-    }
 }

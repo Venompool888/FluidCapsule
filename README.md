@@ -19,7 +19,7 @@ Turn Android notifications into interactive capsules on supported ColorOS device
 - Show one-tap smart replies and adapt the reply panel accent color to the source app icon.
 - Turn LocalSend transfer notifications and Meituan order updates into progress-aware capsules while filtering recognized Meituan promotions.
 - Reformat Speedtest's final `Test Complete` notification so download and upload results remain fully visible in one line.
-- Configure most settings through an ADB-friendly CLI.
+- Configure every user-facing app setting through an ADB-friendly CLI, including per-app rules and history retention.
 - Keep notification processing available with explicit foreground-service and accessibility options.
 
 ## Platform support
@@ -30,7 +30,7 @@ Turn Android notifications into interactive capsules on supported ColorOS device
 
 ## Privacy model
 
-FluidCapsule processes notification text locally. The app does not request internet access and does not upload notification content. OTPs and reply text are not written to diagnostic logs. When notification history is explicitly enabled, captured notification text is persisted locally until the app data is cleared or the app is uninstalled; turning recording off does not delete existing entries. See [Privacy and security](docs/PRIVACY.md) before enabling notification access, history, or accessibility features.
+FluidCapsule processes notification text locally. The app does not request internet access and does not upload notification content. OTPs and reply text are not written to diagnostic logs. When notification history is explicitly enabled, captured notification text follows the configured 1–30 day retention period and can be deleted by entry, app, or in full; turning recording off does not itself delete existing entries. See [Privacy and security](docs/PRIVACY.md) before enabling notification access, history, or accessibility features.
 
 ## Build
 

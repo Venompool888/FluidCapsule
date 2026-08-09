@@ -5,10 +5,9 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import io.github.venompool888.fluidcapsule.core.CapsuleEvent
+import io.github.venompool888.fluidcapsule.settings.UserSettings
 
 object CapsuleCoordinator {
-    private const val DISPLAY_WINDOW_MILLIS = 60_000L
-
     private val queue = CapsuleQueueReducer(maxSize = 8)
     private val handler by lazy { Handler(Looper.getMainLooper()) }
     private var applicationContext: Context? = null
@@ -70,7 +69,11 @@ object CapsuleCoordinator {
         if (winner == null) {
             visibleUntilMillis = 0L
         } else if (changed || resetWindow) {
-            visibleUntilMillis = minOf(winner.expiresAtMillis, now + DISPLAY_WINDOW_MILLIS)
+            val context = applicationContext ?: return
+            visibleUntilMillis = minOf(
+                winner.expiresAtMillis,
+                now + UserSettings.capsuleDisplayDurationMillis(context),
+            )
         }
     }
 

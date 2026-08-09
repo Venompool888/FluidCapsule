@@ -9,7 +9,7 @@ import java.util.UUID
 
 object NotificationHistoryStore {
     private const val DATABASE_NAME = "notification_history.db"
-    private const val DATABASE_VERSION = 4
+    private const val DATABASE_VERSION = 5
     private const val TABLE_HISTORY = "notification_history"
 
     @Volatile
@@ -38,6 +38,8 @@ object NotificationHistoryStore {
             put("posted_at", notification.postedAtMillis)
             put("captured_at", System.currentTimeMillis())
             put("active", 1)
+            put("decision", "CAPTURED")
+            put("decision_detail", "已捕获，等待规则处理")
         }
         val db = database(appContext).writableDatabase
         db.beginTransaction()
@@ -61,6 +63,50 @@ object NotificationHistoryStore {
         } finally {
             db.endTransaction()
         }
+    }
+
+    fun updateDecision(
+        context: Context,
+        notificationKey: String,
+        decision: String,
+        detail: String,
+    ) {
+        val values = ContentValues().apply {
+            put("decision", decision)
+            put("decision_detail", detail)
+        }
+        database(context.applicationContext).writableDatabase.update(
+            TABLE_HISTORY,
+            values,
+            "notification_key = ? AND active = 1",
+            arrayOf(notificationKey),
+        )
+    }
+
+    fun deleteEntry(context: Context, id: Long): Int =
+        database(context.applicationContext).writableDatabase.delete(
+            TABLE_HISTORY,
+            "id = ?",
+            arrayOf(id.toString()),
+        )
+
+    fun deletePackage(context: Context, sourcePackage: String): Int =
+        database(context.applicationContext).writableDatabase.delete(
+            TABLE_HISTORY,
+            "package_name = ?",
+            arrayOf(sourcePackage),
+        )
+
+    fun clear(context: Context): Int =
+        database(context.applicationContext).writableDatabase.delete(TABLE_HISTORY, null, null)
+
+    fun purgeOlderThanDays(context: Context, days: Int): Int {
+        val cutoff = System.currentTimeMillis() - days.coerceIn(1, 30) * 86_400_000L
+        return database(context.applicationContext).writableDatabase.delete(
+            TABLE_HISTORY,
+            "captured_at < ?",
+            arrayOf(cutoff.toString()),
+        )
     }
 
     fun markRemoved(context: Context, notificationKey: String) {
@@ -166,6 +212,8 @@ object NotificationHistoryStore {
                         combinedText = cursor.getString(5),
                         postedAtMillis = cursor.getLong(6),
                         capturedAtMillis = cursor.getLong(7),
+                        decision = cursor.getString(8),
+                        decisionDetail = cursor.getString(9),
                     ),
                 )
             }
@@ -195,6 +243,8 @@ object NotificationHistoryStore {
                     posted_at INTEGER NOT NULL,
                     captured_at INTEGER NOT NULL,
                     active INTEGER NOT NULL DEFAULT 0
+                    ,decision TEXT NOT NULL DEFAULT 'CAPTURED'
+                    ,decision_detail TEXT NOT NULL DEFAULT ''
                 )
                 """.trimIndent(),
             )
@@ -231,6 +281,10 @@ object NotificationHistoryStore {
                     "CREATE INDEX history_package_time ON $TABLE_HISTORY(package_name, captured_at DESC)",
                 )
             }
+            if (oldVersion < 5) {
+                db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN decision TEXT NOT NULL DEFAULT 'UNKNOWN'")
+                db.execSQL("ALTER TABLE $TABLE_HISTORY ADD COLUMN decision_detail TEXT NOT NULL DEFAULT '旧版本记录没有处理详情'")
+            }
         }
     }
 
@@ -243,5 +297,7 @@ object NotificationHistoryStore {
         "combined_text",
         "posted_at",
         "captured_at",
+        "decision",
+        "decision_detail",
     )
 }

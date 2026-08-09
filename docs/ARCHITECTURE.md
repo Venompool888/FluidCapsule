@@ -6,7 +6,7 @@ FluidCapsule converts source notifications into a small internal event model and
 
 1. `CapsuleNotificationListenerService` receives posted notifications.
 2. `NotificationNormalizer` extracts stable text, icons, sender information, actions, and the source content intent.
-   When notification-history recording is enabled, the normalized external notification is also written to the local history database before whitelist routing. Updates to the same active notification refresh one history entry; removal closes that notification lifecycle.
+   When notification-history recording is enabled for the source app, the normalized external notification is written to the local history database before whitelist routing. The final local routing decision and explanation are attached to the same row. Updates to the same active notification refresh one history entry; removal closes that notification lifecycle.
 3. `OtpParser` handles likely verification codes before the generic whitelist route.
 4. `KnownNotificationAdapter` recognizes LocalSend transfer stages, Meituan order stages, and Speedtest's final `Test Complete` notification. Recognized Meituan marketing notifications are suppressed; Speedtest download and upload results are compacted into one line.
 5. The listener applies user privacy settings and creates a `CapsuleEvent`, optionally including progress.
@@ -33,8 +33,8 @@ The custom reply activity exists because some ColorOS surfaces filter actions th
 ## Data lifetime
 
 - Notification content is processed in memory by default.
-- When notification-history recording is explicitly enabled, normalized external notification content is stored in a local SQLite database. Turning recording off stops future writes but retains all existing rows.
-- The history list displays a bounded recent window for UI performance; older rows remain in the database.
+- When notification-history recording is explicitly enabled, normalized external notification content is stored in a local SQLite database. Turning recording off stops future writes but retains existing rows until their configured retention deadline.
+- The history list displays a bounded recent window for UI performance. Retention and entry/app/all deletion are enforced locally and are available through both UI and ADB CLI.
 - Pending capsule events are capped at eight and are never serialized to disk.
 - Diagnostic storage contains state and timing metadata, not message bodies or OTP values.
 - Reply text is forwarded to the original action and is not persisted by FluidCapsule.

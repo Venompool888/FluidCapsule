@@ -9,4 +9,6 @@ data class NotificationHistoryEntry(
     val combinedText: String,
     val postedAtMillis: Long,
     val capturedAtMillis: Long,
+    val decision: String,
+    val decisionDetail: String,
 )

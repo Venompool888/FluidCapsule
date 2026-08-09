@@ -43,10 +43,21 @@ Usage:
   fluid-capsule-cli.sh [--serial SERIAL] whitelist add PACKAGE
   fluid-capsule-cli.sh [--serial SERIAL] whitelist remove PACKAGE
   fluid-capsule-cli.sh [--serial SERIAL] whitelist clear
+  fluid-capsule-cli.sh [--serial SERIAL] whitelist otp-only PACKAGE true|false
   fluid-capsule-cli.sh [--serial SERIAL] set show-otp true|false
   fluid-capsule-cli.sh [--serial SERIAL] set mask-clipboard true|false
   fluid-capsule-cli.sh [--serial SERIAL] set show-whitelist-content true|false
   fluid-capsule-cli.sh [--serial SERIAL] set keep-alive true|false
+  fluid-capsule-cli.sh [--serial SERIAL] set display-duration 1..30
+  fluid-capsule-cli.sh [--serial SERIAL] set history-enabled true|false
+  fluid-capsule-cli.sh [--serial SERIAL] set history-sort time|app_count
+  fluid-capsule-cli.sh [--serial SERIAL] set history-retention 1..30
+  fluid-capsule-cli.sh [--serial SERIAL] app-rule PACKAGE get
+  fluid-capsule-cli.sh [--serial SERIAL] app-rule PACKAGE set KEY VALUE
+  fluid-capsule-cli.sh [--serial SERIAL] app-rule PACKAGE reset
+  fluid-capsule-cli.sh [--serial SERIAL] history count|clear
+  fluid-capsule-cli.sh [--serial SERIAL] history delete-package PACKAGE
+  fluid-capsule-cli.sh [--serial SERIAL] history purge 1..30
   fluid-capsule-cli.sh [--serial SERIAL] system notification-listener true|false
   fluid-capsule-cli.sh [--serial SERIAL] system post-notifications true|false
   fluid-capsule-cli.sh [--serial SERIAL] system accessibility true|false
@@ -98,6 +109,10 @@ case "${1:-}" in
       add) broadcast --es command whitelist-add --es package "${3:?package required}" ;;
       remove) broadcast --es command whitelist-remove --es package "${3:?package required}" ;;
       clear) broadcast --es command whitelist-clear ;;
+      otp-only)
+        require_boolean "${4:-}"
+        broadcast --es command whitelist-set-otp-only --es package "${3:?package required}" --es value "$4"
+        ;;
       *) usage; exit 2 ;;
     esac
     ;;
@@ -109,9 +124,31 @@ case "${1:-}" in
       mask-clipboard) command="set-mask-clipboard" ;;
       show-whitelist-content) command="set-show-whitelist-content" ;;
       keep-alive) command="set-keep-alive" ;;
+      display-duration) command="set-display-duration" ;;
+      history-enabled) command="set-history-enabled" ;;
+      history-sort) command="set-history-sort" ;;
+      history-retention) command="set-history-retention" ;;
       *) usage; exit 2 ;;
     esac
     broadcast --es command "$command" --es value "$value"
+    ;;
+  app-rule)
+    package_name="${2:?package required}"
+    case "${3:-}" in
+      get) broadcast --es command app-rule-get --es package "$package_name" ;;
+      set) broadcast --es command app-rule-set --es package "$package_name" --es key "${4:?key required}" --es value "${5-}" ;;
+      reset) broadcast --es command app-rule-reset --es package "$package_name" ;;
+      *) usage; exit 2 ;;
+    esac
+    ;;
+  history)
+    case "${2:-}" in
+      count) broadcast --es command history-count ;;
+      clear) broadcast --es command history-clear ;;
+      delete-package) broadcast --es command history-delete-package --es package "${3:?package required}" ;;
+      purge) broadcast --es command history-purge --es value "${3:?days required}" ;;
+      *) usage; exit 2 ;;
+    esac
     ;;
   system)
     setting="${2:-}"

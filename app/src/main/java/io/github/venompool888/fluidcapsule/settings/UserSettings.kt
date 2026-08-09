@@ -10,6 +10,8 @@ object UserSettings {
     private const val KEY_KEEP_ALIVE_ENABLED = "keep_alive_enabled"
     private const val KEY_NOTIFICATION_HISTORY_ENABLED = "notification_history_enabled"
     private const val KEY_NOTIFICATION_HISTORY_SORT_MODE = "notification_history_sort_mode"
+    private const val KEY_CAPSULE_DISPLAY_DURATION_MINUTES = "capsule_display_duration_minutes"
+    private const val KEY_NOTIFICATION_HISTORY_RETENTION_DAYS = "notification_history_retention_days"
 
     fun showOtpDirectly(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -76,5 +78,37 @@ object UserSettings {
             .edit()
             .putString(KEY_NOTIFICATION_HISTORY_SORT_MODE, mode)
             .apply()
+    }
+
+    fun capsuleDisplayDurationMinutes(context: Context): Int =
+        CapsuleDisplayDuration.normalizeMinutes(
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getInt(
+                    KEY_CAPSULE_DISPLAY_DURATION_MINUTES,
+                    CapsuleDisplayDuration.defaultMinutes,
+                ),
+        )
+
+    fun capsuleDisplayDurationMillis(context: Context): Long =
+        CapsuleDisplayDuration.toMillis(capsuleDisplayDurationMinutes(context))
+
+    fun setCapsuleDisplayDurationMinutes(context: Context, minutes: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(
+                KEY_CAPSULE_DISPLAY_DURATION_MINUTES,
+                CapsuleDisplayDuration.normalizeMinutes(minutes),
+            )
+            .apply()
+    }
+
+    fun notificationHistoryRetentionDays(context: Context): Int =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_NOTIFICATION_HISTORY_RETENTION_DAYS, 7)
+            .coerceIn(1, 30)
+
+    fun setNotificationHistoryRetentionDays(context: Context, days: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_NOTIFICATION_HISTORY_RETENTION_DAYS, days.coerceIn(1, 30)).apply()
     }
 }

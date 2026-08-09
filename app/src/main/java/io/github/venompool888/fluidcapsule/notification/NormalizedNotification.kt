@@ -18,4 +18,5 @@ data class NormalizedNotification(
     val actions: List<Notification.Action>,
     val isGroupSummary: Boolean,
     val isOngoing: Boolean,
+    val channelId: String,
 )
