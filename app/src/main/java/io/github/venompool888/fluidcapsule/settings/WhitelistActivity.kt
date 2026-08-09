@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -67,7 +68,7 @@ class WhitelistActivity : Activity() {
             setTextColor(Color.rgb(20, 43, 68))
         })
         root.addView(TextView(this).apply {
-            text = "勾选后立即生效；验证码优先解析，原通知默认保留。"
+            text = "勾选后立即生效；邮箱应用可进一步选择“仅验证码上云”。"
             textSize = 14f
             setTextColor(Color.DKGRAY)
             setPadding(0, dp(4), 0, dp(10))
@@ -241,14 +242,55 @@ class WhitelistActivity : Activity() {
 
         val checkBox = CheckBox(this)
         row.addView(checkBox, LinearLayout.LayoutParams(dp(52), dp(52)))
+
+        val otpOnlyRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(64), dp(4), dp(2), dp(10))
+        }
+        val otpOnlyLabels = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        otpOnlyLabels.addView(TextView(this).apply {
+            text = "仅验证码上云"
+            textSize = 15f
+            setTextColor(Color.rgb(20, 43, 68))
+        })
+        otpOnlyLabels.addView(TextView(this).apply {
+            text = "忽略普通邮件，只显示识别成功的验证码"
+            textSize = 12f
+            setTextColor(Color.GRAY)
+        })
+        otpOnlyRow.addView(
+            otpOnlyLabels,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        @Suppress("DEPRECATION")
+        val otpOnlySwitch = Switch(this)
+        otpOnlyRow.addView(
+            otpOnlySwitch,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(row, matchWidthWrapHeight())
+            addView(otpOnlyRow, matchWidthWrapHeight())
             addView(View(this@WhitelistActivity).apply {
                 setBackgroundColor(Color.rgb(232, 232, 232))
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
         }
-        wrapper.tag = AppRowHolder(row, iconView, labelView, packageView, checkBox)
+        wrapper.tag = AppRowHolder(
+            row,
+            iconView,
+            labelView,
+            packageView,
+            checkBox,
+            otpOnlyRow,
+            otpOnlySwitch,
+        )
         return wrapper
     }
 
@@ -269,6 +311,16 @@ class WhitelistActivity : Activity() {
     private fun loadApplications(): List<AppEntry> {
         val selected = NotificationWhitelist.packages(this)
         val defaultSms = Telephony.Sms.getDefaultSmsPackage(this)
+        val mailtoIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:test@example.com"))
+        val mailtoHandlers = if (Build.VERSION.SDK_INT >= 33) {
+            packageManager.queryIntentActivities(
+                mailtoIntent,
+                PackageManager.ResolveInfoFlags.of(0),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.queryIntentActivities(mailtoIntent, 0)
+        }.asSequence().map { it.activityInfo.packageName }.toHashSet()
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val launchablePackages = if (Build.VERSION.SDK_INT >= 33) {
             packageManager.queryIntentActivities(
@@ -299,6 +351,7 @@ class WhitelistActivity : Activity() {
                 AppEntry(
                     packageName = app.packageName,
                     label = packageManager.getApplicationLabel(app).toString(),
+                    isEmailApp = EmailAppClassifier.isEmailApp(app.packageName, mailtoHandlers),
                 )
             }
             .distinctBy { it.packageName }
@@ -355,6 +408,22 @@ class WhitelistActivity : Activity() {
                 refresh()
             }
             holder.row.setOnClickListener { holder.checkBox.isChecked = !holder.checkBox.isChecked }
+
+            holder.otpOnlyRow.visibility = if (selected && entry.isEmailApp) View.VISIBLE else View.GONE
+            holder.otpOnlySwitch.setOnCheckedChangeListener(null)
+            holder.otpOnlySwitch.isChecked = NotificationWhitelist.isOtpOnly(
+                this@WhitelistActivity,
+                entry.packageName,
+            )
+            holder.otpOnlySwitch.contentDescription = "仅验证码上云"
+            holder.otpOnlySwitch.setOnCheckedChangeListener { _, checked ->
+                NotificationWhitelist.setOtpOnly(
+                    this@WhitelistActivity,
+                    entry.packageName,
+                    checked,
+                )
+                holder.otpOnlyRow.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            }
             return view
         }
     }
@@ -401,13 +470,19 @@ class WhitelistActivity : Activity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
-    private data class AppEntry(val packageName: String, val label: String)
+    private data class AppEntry(
+        val packageName: String,
+        val label: String,
+        val isEmailApp: Boolean,
+    )
     private data class AppRowHolder(
         val row: LinearLayout,
         val icon: ImageView,
         val label: TextView,
         val packageName: TextView,
         val checkBox: CheckBox,
+        val otpOnlyRow: LinearLayout,
+        val otpOnlySwitch: Switch,
     )
 
     companion object {

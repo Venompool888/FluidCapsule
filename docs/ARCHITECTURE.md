@@ -6,6 +6,7 @@ FluidCapsule converts source notifications into a small internal event model and
 
 1. `CapsuleNotificationListenerService` receives posted notifications.
 2. `NotificationNormalizer` extracts stable text, icons, sender information, actions, and the source content intent.
+   When notification-history recording is enabled, the normalized external notification is also written to the local history database before whitelist routing. Updates to the same active notification refresh one history entry; removal closes that notification lifecycle.
 3. `OtpParser` handles likely verification codes before the generic whitelist route.
 4. `KnownNotificationAdapter` recognizes LocalSend transfer stages, Meituan order stages, and Speedtest's final `Test Complete` notification. Recognized Meituan marketing notifications are suppressed; Speedtest download and upload results are compacted into one line.
 5. The listener applies user privacy settings and creates a `CapsuleEvent`, optionally including progress.
@@ -31,7 +32,9 @@ The custom reply activity exists because some ColorOS surfaces filter actions th
 
 ## Data lifetime
 
-- Notification content is processed in memory.
+- Notification content is processed in memory by default.
+- When notification-history recording is explicitly enabled, normalized external notification content is stored in a local SQLite database. Turning recording off stops future writes but retains all existing rows.
+- The history list displays a bounded recent window for UI performance; older rows remain in the database.
 - Pending capsule events are capped at eight and are never serialized to disk.
 - Diagnostic storage contains state and timing metadata, not message bodies or OTP values.
 - Reply text is forwarded to the original action and is not persisted by FluidCapsule.
@@ -41,3 +44,7 @@ The custom reply activity exists because some ColorOS surfaces filter actions th
 ## Compatibility strategy
 
 The project uses public Android notification APIs. OEM promotion and rendering decisions remain outside the app's control, so every promoted notification path has a standard-notification fallback.
+
+## Optional server persistence
+
+The selected future server database is PostgreSQL. Android continues to use SQLite for offline-first capture and browsing; it must synchronize through an authenticated HTTPS API rather than connect directly to PostgreSQL. The schema and remaining security prerequisites are documented in [PostgreSQL notification-history boundary](POSTGRES_SYNC.md).

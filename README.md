@@ -2,7 +2,7 @@
 
 Turn Android notifications into interactive capsules on supported ColorOS devices.
 
-将 Android 通知转换为可交互的 ColorOS 流体云胶囊，包括验证码提取、通知白名单、原通知跳转和快捷回复。
+将 Android 通知转换为可交互的 ColorOS 流体云胶囊，包括验证码提取、通知白名单、邮箱“仅验证码上云”、原通知跳转和快捷回复。
 
 > [!IMPORTANT]
 > FluidCapsule is an independent, unofficial open-source project. It is not affiliated with or endorsed by OPPO, ColorOS, Telegram, WeChat, or any other app vendor.
@@ -10,6 +10,7 @@ Turn Android notifications into interactive capsules on supported ColorOS device
 ## Features
 
 - Listen for notifications from user-selected apps.
+- Optionally keep a local notification history with a recording switch that never deletes existing entries when turned off; browse it by time or by folded app groups ordered by notification count.
 - Extract one-time passwords from SMS notifications and display the code directly.
 - Copy an OTP by tapping its capsule, with an optional masked clipboard preview.
 - Mirror whitelisted notifications with the original app icon, sender avatar, title, and message.
@@ -29,7 +30,7 @@ Turn Android notifications into interactive capsules on supported ColorOS device
 
 ## Privacy model
 
-FluidCapsule processes notification text locally. The app does not request internet access and does not upload notification content. OTPs and reply text are not written to diagnostic logs. See [Privacy and security](docs/PRIVACY.md) before enabling notification access or accessibility features.
+FluidCapsule processes notification text locally. The app does not request internet access and does not upload notification content. OTPs and reply text are not written to diagnostic logs. When notification history is explicitly enabled, captured notification text is persisted locally until the app data is cleared or the app is uninstalled; turning recording off does not delete existing entries. See [Privacy and security](docs/PRIVACY.md) before enabling notification access, history, or accessibility features.
 
 ## Build
 

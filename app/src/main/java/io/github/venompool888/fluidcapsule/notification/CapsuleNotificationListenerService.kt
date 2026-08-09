@@ -11,6 +11,7 @@ import io.github.venompool888.fluidcapsule.core.CapsuleEvent
 import io.github.venompool888.fluidcapsule.core.CapsuleKind
 import io.github.venompool888.fluidcapsule.core.CapsulePrivacy
 import io.github.venompool888.fluidcapsule.diagnostics.DiagnosticsStore
+import io.github.venompool888.fluidcapsule.history.NotificationHistoryStore
 import io.github.venompool888.fluidcapsule.integration.KnownNotificationAdapter
 import io.github.venompool888.fluidcapsule.integration.KnownNotificationDecision
 import io.github.venompool888.fluidcapsule.parser.OtpParseResult
@@ -19,21 +20,30 @@ import io.github.venompool888.fluidcapsule.publisher.CapsuleCoordinator
 import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
 import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
 import io.github.venompool888.fluidcapsule.settings.UserSettings
+import java.util.concurrent.Executors
 
 class CapsuleNotificationListenerService : NotificationListenerService() {
     private var lastMirroredSourceKey: String? = null
     private var lastSmartReplies: List<String> = emptyList()
+    private val historyExecutor = Executors.newSingleThreadExecutor()
 
     override fun onListenerConnected() {
         super.onListenerConnected()
         DiagnosticsStore.markListenerConnected(this, true)
         val recentCutoff = System.currentTimeMillis() - QUEUE_RETENTION_MILLIS
-        runCatching { activeNotifications.orEmpty().toList() }
+        val currentNotifications = runCatching { activeNotifications.orEmpty().toList() }
             .getOrDefault(emptyList())
+        historyExecutor.execute {
+            NotificationHistoryStore.reconcileActiveNotifications(
+                applicationContext,
+                currentNotifications.mapTo(mutableSetOf()) { it.key },
+            )
+        }
+        currentNotifications
             .asSequence()
             .filter { it.packageName != packageName && it.postTime >= recentCutoff }
             .sortedBy { it.postTime }
-            .forEach { processNotification(it, currentRanking) }
+            .forEach { processNotification(it, currentRanking, recordHistory = true) }
     }
 
     override fun onListenerDisconnected() {
@@ -43,11 +53,11 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        processNotification(sbn, currentRanking)
+        processNotification(sbn, currentRanking, recordHistory = true)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap) {
-        processNotification(sbn, rankingMap)
+        processNotification(sbn, rankingMap, recordHistory = true)
     }
 
     override fun onNotificationRankingUpdate(rankingMap: RankingMap) {
@@ -55,12 +65,15 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         val features = rankingFeatures(rankingMap, sourceKey)
         if (features.smartReplies.isEmpty() || features.smartReplies == lastSmartReplies) return
         activeNotifications.firstOrNull { it.key == sourceKey }
-            ?.let { processNotification(it, rankingMap) }
+            ?.let { processNotification(it, rankingMap, recordHistory = false) }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (sbn.packageName != packageName) {
             CapsuleCoordinator.removeSourceEvent(this, sbn.key)
+            historyExecutor.execute {
+                NotificationHistoryStore.markRemoved(applicationContext, sbn.key)
+            }
         }
         if (sbn.key == lastMirroredSourceKey) {
             lastMirroredSourceKey = null
@@ -68,10 +81,25 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         }
     }
 
-    private fun processNotification(sbn: StatusBarNotification, rankingMap: RankingMap) {
+    override fun onDestroy() {
+        historyExecutor.shutdown()
+        super.onDestroy()
+    }
+
+    private fun processNotification(
+        sbn: StatusBarNotification,
+        rankingMap: RankingMap,
+        recordHistory: Boolean,
+    ) {
         if (sbn.packageName == packageName) return
 
         DiagnosticsStore.markNotificationSeen(this, sbn.packageName)
+        val normalized = NotificationNormalizer.normalize(sbn)
+        if (recordHistory && UserSettings.notificationHistoryEnabled(this)) {
+            historyExecutor.execute {
+                NotificationHistoryStore.record(applicationContext, normalized)
+            }
+        }
         val defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(this)
         val isDefaultSms = defaultSmsPackage != null && sbn.packageName == defaultSmsPackage
         val isWhitelisted = NotificationWhitelist.contains(this, sbn.packageName)
@@ -80,12 +108,14 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
             return
         }
 
-        val normalized = NotificationNormalizer.normalize(sbn)
         if (normalized.isGroupSummary || normalized.combinedText.isBlank()) {
             DiagnosticsStore.markParse(this, "SKIPPED_EMPTY_OR_GROUP_SUMMARY")
             return
         }
-        when (val result = OtpParser.parse(normalized.combinedText)) {
+        // Parse only the currently displayed message. Aggregated text can contain the
+        // conversation title and stale MessagingStyle messages, which must never become
+        // OTP candidates for the latest notification.
+        when (val result = OtpParser.parse(normalized.primaryText)) {
             is OtpParseResult.Success -> {
                 DiagnosticsStore.markParse(this, "OTP_SUCCESS_${result.confidence}")
                 val now = System.currentTimeMillis()
@@ -120,6 +150,10 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         }
 
         if (!isWhitelisted) return
+        if (NotificationWhitelist.isOtpOnly(this, normalized.packageName)) {
+            DiagnosticsStore.markParse(this, "SKIPPED_OTP_ONLY_NON_OTP")
+            return
+        }
 
         val now = System.currentTimeMillis()
         val showContent = UserSettings.showWhitelistContent(this)

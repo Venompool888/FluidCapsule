@@ -8,6 +8,20 @@ Notification-listener access allows the app to read notifications, including pot
 
 Processing is local. The manifest does not request internet access, and the project contains no analytics or advertising SDK.
 
+## Notification history
+
+Notification history is disabled by default. When the user enables **Record new notifications**, FluidCapsule stores normalized notification content from external apps in a local SQLite database, including the source app, title, body, and capture time. This can include private messages, verification codes, financial alerts, and other sensitive text.
+
+The switch controls future writes only:
+
+- turning it on starts recording newly captured notifications;
+- turning it off stops recording new notifications;
+- turning it off never deletes entries that were already stored.
+
+Updates to one still-active notification replace that notification's current history row instead of creating an entry for every progress or network-speed refresh. Once Android reports the notification as removed, a later notification with the same system key begins a new history entry.
+
+History stays on the device and is not included in diagnostic output. The app has backups disabled. Existing history remains until the app data is cleared or the app is uninstalled; a user-facing delete control is not part of the current version.
+
 ## Notification posting
 
 Posting access is used to create the capsule or its standard notification fallback. On Android versions that support promoted ongoing notifications, the user may need to enable promotion separately.

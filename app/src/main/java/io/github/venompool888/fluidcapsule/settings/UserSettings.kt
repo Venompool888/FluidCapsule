@@ -8,6 +8,8 @@ object UserSettings {
     private const val KEY_MASK_OTP_CLIPBOARD_PREVIEW = "mask_otp_clipboard_preview"
     private const val KEY_SHOW_WHITELIST_CONTENT = "show_whitelist_content"
     private const val KEY_KEEP_ALIVE_ENABLED = "keep_alive_enabled"
+    private const val KEY_NOTIFICATION_HISTORY_ENABLED = "notification_history_enabled"
+    private const val KEY_NOTIFICATION_HISTORY_SORT_MODE = "notification_history_sort_mode"
 
     fun showOtpDirectly(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -50,6 +52,29 @@ object UserSettings {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putBoolean(KEY_KEEP_ALIVE_ENABLED, enabled)
+            .apply()
+    }
+
+    fun notificationHistoryEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIFICATION_HISTORY_ENABLED, false)
+
+    fun setNotificationHistoryEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_NOTIFICATION_HISTORY_ENABLED, enabled)
+            .apply()
+    }
+
+    fun notificationHistorySortMode(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_NOTIFICATION_HISTORY_SORT_MODE, "time")
+            ?: "time"
+
+    fun setNotificationHistorySortMode(context: Context, mode: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_NOTIFICATION_HISTORY_SORT_MODE, mode)
             .apply()
     }
 }
