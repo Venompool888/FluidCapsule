@@ -15,6 +15,8 @@ Turn Android notifications into interactive capsules on supported ColorOS device
 - Mirror whitelisted notifications with the original app icon, sender avatar, title, and message.
 - Open the source notification and, when the source exposes Android `RemoteInput`, forward reply and mark-as-read actions.
 - Show one-tap smart replies and adapt the reply panel accent color to the source app icon.
+- Turn LocalSend transfer notifications and Meituan order updates into progress-aware capsules while filtering recognized Meituan promotions.
+- Optionally read visible Speedtest metrics while Speedtest is in the foreground and publish a live measurement capsule.
 - Configure most settings through an ADB-friendly CLI.
 - Keep notification processing available with explicit foreground-service and accessibility options.
 
@@ -50,17 +52,18 @@ The debug APK is intentionally excluded from Git. Build it locally or install a 
 3. Select trusted source apps in the notification whitelist.
 4. On supported ColorOS versions, allow promoted/live notifications for FluidCapsule.
 5. Optionally enable the explicit keep-alive controls if your device stops the listener in the background.
+6. For the Speedtest adapter, explicitly enable both the in-app switch and FluidCapsule accessibility service.
 
 For repeatable device configuration, see [ADB CLI](docs/CLI.md).
 
 ## How it works
 
 ```text
-Source notification
+Source notification / explicitly supported foreground status
         ↓
-NotificationListenerService
+NotificationListenerService / package-scoped accessibility adapter
         ↓
-Normalize → OTP parser / whitelist policy
+Normalize → OTP parser / known-app adapter / whitelist policy
         ↓
 CapsuleEvent
         ↓
@@ -74,7 +77,7 @@ More detail is available in [Architecture](docs/ARCHITECTURE.md) and [ColorOS no
 - A direct reply is only possible when the source notification supplies a valid `RemoteInput` action. FluidCapsule cannot invent a private sending API for another app.
 - Smart replies are sent immediately when tapped. Manually typed replies still require the Send button.
 - OEM live-notification behavior can change between ColorOS releases.
-- The accessibility service in the current public version is for user-requested keep-alive support. Experimental UI automation for apps without native reply actions is not implemented.
+- Accessibility UI automation for apps without native reply actions is not implemented. The optional Speedtest adapter only reads visible Speedtest metrics; it does not click or type.
 - The project does not include third-party APKs, decompiled source, proprietary assets, private protocols, or account-bypass features.
 
 ## Contributing

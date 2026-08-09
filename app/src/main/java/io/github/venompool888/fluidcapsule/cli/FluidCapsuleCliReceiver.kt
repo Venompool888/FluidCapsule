@@ -56,11 +56,14 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
         "set-show-whitelist-content" -> setBoolean(context, command, intent) {
             UserSettings.setShowWhitelistContent(context, it)
         }
+        "set-speedtest-cloud" -> setBoolean(context, command, intent) {
+            UserSettings.setSpeedtestCloudEnabled(context, it)
+        }
         "set-keep-alive" -> setKeepAlive(context, command, requiredBoolean(intent))
         else -> throw IllegalArgumentException(
             "unknown command; use status, whitelist-list/add/remove/clear, " +
                 "set-show-otp-directly, set-mask-clipboard, " +
-                "set-show-whitelist-content, or set-keep-alive",
+                "set-show-whitelist-content, set-speedtest-cloud, or set-keep-alive",
         )
     }
 
@@ -111,6 +114,7 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
             .put("showOtpDirectly", UserSettings.showOtpDirectly(context))
             .put("maskClipboardPreview", UserSettings.maskOtpClipboardPreview(context))
             .put("showWhitelistContent", UserSettings.showWhitelistContent(context))
+            .put("speedtestCloudEnabled", UserSettings.speedtestCloudEnabled(context))
             .put("whitelist", JSONArray(NotificationWhitelist.packages(context).sorted()))
     }
 

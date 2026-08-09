@@ -47,6 +47,7 @@ Usage:
   fluid-capsule-cli.sh [--serial SERIAL] set mask-clipboard true|false
   fluid-capsule-cli.sh [--serial SERIAL] set show-whitelist-content true|false
   fluid-capsule-cli.sh [--serial SERIAL] set keep-alive true|false
+  fluid-capsule-cli.sh [--serial SERIAL] set speedtest-cloud true|false
   fluid-capsule-cli.sh [--serial SERIAL] system notification-listener true|false
   fluid-capsule-cli.sh [--serial SERIAL] system post-notifications true|false
   fluid-capsule-cli.sh [--serial SERIAL] system accessibility true|false
@@ -109,6 +110,7 @@ case "${1:-}" in
       mask-clipboard) command="set-mask-clipboard" ;;
       show-whitelist-content) command="set-show-whitelist-content" ;;
       keep-alive) command="set-keep-alive" ;;
+      speedtest-cloud) command="set-speedtest-cloud" ;;
       *) usage; exit 2 ;;
     esac
     broadcast --es command "$command" --es value "$value"

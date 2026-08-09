@@ -22,13 +22,22 @@ object AospLiveUpdatePublisher : CapsulePublisher {
                 },
             )
 
-        if (event.kind != CapsuleKind.NOTIFICATION) {
-            builder.setProgress(100, 100, false)
+        if (event.progress != null) {
+            val maximum = event.progressMax.coerceAtLeast(1)
+            val current = event.progress.coerceIn(0, maximum)
+            builder.setProgress(maximum, current, event.progressIndeterminate)
                 .setStyle(
                 Notification.ProgressStyle()
                     .setStyledByProgress(false)
-                    .setProgress(100),
+                    .setProgress(current),
             )
+        } else if (event.kind == CapsuleKind.OTP) {
+            builder.setProgress(100, 100, false)
+                .setStyle(
+                    Notification.ProgressStyle()
+                        .setStyledByProgress(false)
+                        .setProgress(100),
+                )
         }
         val notification = builder
             .addExtras(android.os.Bundle().apply {

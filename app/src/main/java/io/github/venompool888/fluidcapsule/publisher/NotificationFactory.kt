@@ -106,6 +106,14 @@ internal object NotificationFactory {
 
         event.sourceSmallIcon?.let(builder::setSmallIcon) ?: builder.setSmallIcon(R.drawable.ic_capsule)
         event.sourceLargeIcon?.let(builder::setLargeIcon)
+        event.progress?.let { progress ->
+            val maximum = event.progressMax.coerceAtLeast(1)
+            builder.setProgress(
+                maximum,
+                progress.coerceIn(0, maximum),
+                event.progressIndeterminate,
+            )
+        }
         if (event.kind == CapsuleKind.NOTIFICATION) {
             addForwardedActions(context, builder, event)
         }

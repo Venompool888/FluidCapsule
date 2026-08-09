@@ -11,6 +11,7 @@ The CLI script exposes repeatable configuration for development and testing.
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set mask-clipboard false
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set show-whitelist-content true
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set keep-alive true
+./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set speedtest-cloud true
 ```
 
 System-level helpers are also available:
@@ -26,3 +27,5 @@ System-level helpers are also available:
 If exactly one authorized Android device is connected, `--serial` may be omitted. Otherwise specify it explicitly or set `ANDROID_SERIAL`.
 
 The exported CLI receiver requires Android's signature-level `DUMP` permission, which the ADB shell holds. Ordinary third-party applications cannot invoke it.
+
+`speedtest-cloud` controls the in-app consent switch. The separate `system accessibility true` helper enables the Android accessibility component during development; both must be enabled for Speedtest foreground metrics to be read.

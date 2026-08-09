@@ -11,6 +11,8 @@ import io.github.venompool888.fluidcapsule.core.CapsuleEvent
 import io.github.venompool888.fluidcapsule.core.CapsuleKind
 import io.github.venompool888.fluidcapsule.core.CapsulePrivacy
 import io.github.venompool888.fluidcapsule.diagnostics.DiagnosticsStore
+import io.github.venompool888.fluidcapsule.integration.KnownNotificationAdapter
+import io.github.venompool888.fluidcapsule.integration.KnownNotificationDecision
 import io.github.venompool888.fluidcapsule.parser.OtpParseResult
 import io.github.venompool888.fluidcapsule.parser.OtpParser
 import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
@@ -109,6 +111,21 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
 
         if (!isWhitelisted) return
 
+        val now = System.currentTimeMillis()
+        val showContent = UserSettings.showWhitelistContent(this)
+        when (val decision = KnownNotificationAdapter.adapt(this, normalized, showContent, now)) {
+            is KnownNotificationDecision.Publish -> {
+                DiagnosticsStore.markParse(this, "KNOWN_APP_${normalized.packageName}")
+                PublisherRouter.publish(this, decision.event)
+                return
+            }
+            KnownNotificationDecision.Suppress -> {
+                DiagnosticsStore.markParse(this, "KNOWN_APP_SUPPRESSED_${normalized.packageName}")
+                return
+            }
+            null -> Unit
+        }
+
         val appLabel = runCatching {
             packageManager.getApplicationLabel(
                 packageManager.getApplicationInfo(normalized.packageName, 0),
@@ -137,8 +154,6 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
                     ?: "有新通知"
             }
             .take(220)
-        val now = System.currentTimeMillis()
-        val showContent = UserSettings.showWhitelistContent(this)
         val rankingFeatures = rankingFeatures(rankingMap, normalized.notificationKey)
         val sourceActions = (normalized.actions + rankingFeatures.smartActions)
             .distinctBy { "${it.semanticAction}:${it.title}" }

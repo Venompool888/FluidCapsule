@@ -14,9 +14,9 @@ Posting access is used to create the capsule or its standard notification fallba
 
 ## Accessibility
 
-The optional accessibility service is intended to support explicit keep-alive behavior on aggressive OEM background-management systems. The current public implementation does not inspect or automate third-party app interfaces.
+The optional accessibility service supports explicit keep-alive behavior and the opt-in Speedtest adapter. Android restricts this service to `org.zwanoo.android.speedtest`. When both the adapter switch and service are enabled, FluidCapsule reads the visible Speedtest accessibility tree to recognize measurement labels and numeric values.
 
-Accessibility access should remain optional. The notification pipeline must continue to degrade safely when it is disabled.
+The service does not click, type, submit, or navigate. Raw accessibility text is not logged or persisted. Accessibility remains optional; notification-based adapters continue to work when it is disabled.
 
 ## Clipboard
 

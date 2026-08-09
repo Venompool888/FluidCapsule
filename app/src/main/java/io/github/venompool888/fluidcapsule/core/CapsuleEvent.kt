@@ -20,6 +20,9 @@ data class CapsuleEvent(
     val createdAtMillis: Long,
     val expiresAtMillis: Long,
     val dedupeKey: String,
+    val progress: Int? = null,
+    val progressMax: Int = 100,
+    val progressIndeterminate: Boolean = false,
 )
 
 enum class CapsuleKind {
