@@ -56,7 +56,8 @@ internal object NotificationFactory {
                 event.eventId.hashCode(),
                 Intent(context, CopyOtpReceiver::class.java)
                     .setAction(CopyOtpReceiver.ACTION_COPY_OTP)
-                    .putExtra(CopyOtpReceiver.EXTRA_OTP, action.value),
+                    .putExtra(CopyOtpReceiver.EXTRA_OTP, action.value)
+                    .putExtra(CopyOtpReceiver.EXTRA_EVENT_ID, event.eventId),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             is CapsuleAction.OpenOriginal -> PendingIntent.getActivity(
@@ -65,7 +66,8 @@ internal object NotificationFactory {
                 Intent(context, OpenOriginalActivity::class.java)
                     .setAction(OpenOriginalActivity.ACTION_OPEN_ORIGINAL)
                     .putExtra(OpenOriginalActivity.EXTRA_ORIGINAL_INTENT, action.pendingIntent)
-                    .putExtra(OpenOriginalActivity.EXTRA_SOURCE_PACKAGE, event.sourcePackage),
+                    .putExtra(OpenOriginalActivity.EXTRA_SOURCE_PACKAGE, event.sourcePackage)
+                    .putExtra(OpenOriginalActivity.EXTRA_EVENT_ID, event.eventId),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
             CapsuleAction.None -> null
@@ -168,6 +170,7 @@ internal object NotificationFactory {
         val wrapperIntent = Intent(context, ForwardNotificationActionReceiver::class.java)
             .setAction(ForwardNotificationActionReceiver.ACTION_FORWARD_NOTIFICATION_ACTION)
             .putExtra(ForwardNotificationActionReceiver.EXTRA_SOURCE_ACTION, sourceAction)
+            .putExtra(ForwardNotificationActionReceiver.EXTRA_EVENT_ID, event.eventId)
         val requestKey = "${event.eventId}:${sourceAction.semanticAction}:${sourceAction.title}"
         val wrapper = PendingIntent.getBroadcast(
             context,
@@ -204,6 +207,7 @@ internal object NotificationFactory {
             .putExtra(ReplyActivity.EXTRA_CONVERSATION_TITLE, event.title)
             .putExtra(ReplyActivity.EXTRA_SOURCE_LABEL, event.sourceLabel)
             .putExtra(ReplyActivity.EXTRA_SOURCE_PACKAGE, event.sourcePackage)
+            .putExtra(ReplyActivity.EXTRA_EVENT_ID, event.eventId)
             .putExtra(
                 ReplyActivity.EXTRA_ORIGINAL_MESSAGE,
                 if (event.privacy == CapsulePrivacy.SHOW_FULL) event.body else "内容已隐藏",

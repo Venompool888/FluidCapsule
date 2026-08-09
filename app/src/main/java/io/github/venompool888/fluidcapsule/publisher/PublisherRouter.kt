@@ -6,7 +6,11 @@ import io.github.venompool888.fluidcapsule.core.CapsuleEvent
 import io.github.venompool888.fluidcapsule.diagnostics.DiagnosticsStore
 
 object PublisherRouter {
-    fun publish(context: Context, event: CapsuleEvent): PublishResult {
+    fun publish(context: Context, event: CapsuleEvent) {
+        CapsuleCoordinator.submit(context, event)
+    }
+
+    internal fun publishDirect(context: Context, event: CapsuleEvent): PublishResult {
         val result = if (Build.VERSION.SDK_INT >= 36) {
             AospLiveUpdatePublisher.publish(context, event)
         } else {
@@ -14,9 +18,5 @@ object PublisherRouter {
         }
         DiagnosticsStore.markPublish(context, result.publisher, result.detail)
         return result
-    }
-
-    fun publishCopiedFeedback(context: Context) {
-        NotificationFallbackPublisher.publishCopiedFeedback(context)
     }
 }

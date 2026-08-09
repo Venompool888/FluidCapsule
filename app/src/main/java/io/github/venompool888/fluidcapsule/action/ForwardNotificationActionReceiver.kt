@@ -1,7 +1,6 @@
 package io.github.venompool888.fluidcapsule.action
 
 import android.app.Notification
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.BroadcastReceiver
@@ -9,18 +8,23 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import io.github.venompool888.fluidcapsule.publisher.NotificationFactory
+import io.github.venompool888.fluidcapsule.publisher.CapsuleCoordinator
 
 class ForwardNotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_FORWARD_NOTIFICATION_ACTION) return
 
+        val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
         val sourceAction = if (Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableExtra(EXTRA_SOURCE_ACTION, Notification.Action::class.java)
         } else {
             @Suppress("DEPRECATION")
             intent.getParcelableExtra(EXTRA_SOURCE_ACTION)
-        } ?: return
+        }
+        if (sourceAction == null) {
+            CapsuleCoordinator.consume(context, eventId)
+            return
+        }
 
         val fillInIntent = Intent()
         val remoteInputs = sourceAction.remoteInputs.orEmpty()
@@ -38,12 +42,12 @@ class ForwardNotificationActionReceiver : BroadcastReceiver() {
                 ?.let { RemoteInput.addDataResultToIntent(input, fillInIntent, it) }
         }
 
-        context.getSystemService(NotificationManager::class.java)
-            .cancel(NotificationFactory.CAPSULE_NOTIFICATION_ID)
         try {
             sourceAction.actionIntent.send(context, 0, fillInIntent)
         } catch (_: PendingIntent.CanceledException) {
-            // The source app invalidated the action; the stale capsule is already removed.
+            // The source app invalidated the action; consume the stale capsule below.
+        } finally {
+            CapsuleCoordinator.consume(context, eventId)
         }
     }
 
@@ -52,5 +56,6 @@ class ForwardNotificationActionReceiver : BroadcastReceiver() {
             "io.github.venompool888.fluidcapsule.action.FORWARD_NOTIFICATION_ACTION"
         const val EXTRA_SOURCE_ACTION = "source_action"
         const val EXTRA_PRESET_REPLY = "preset_reply"
+        const val EXTRA_EVENT_ID = "event_id"
     }
 }

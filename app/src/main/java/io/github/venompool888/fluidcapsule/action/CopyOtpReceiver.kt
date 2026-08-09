@@ -8,7 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.PersistableBundle
-import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
+import android.widget.Toast
+import io.github.venompool888.fluidcapsule.publisher.CapsuleCoordinator
 import io.github.venompool888.fluidcapsule.settings.UserSettings
 
 class CopyOtpReceiver : BroadcastReceiver() {
@@ -24,11 +25,13 @@ class CopyOtpReceiver : BroadcastReceiver() {
             }
         }
         context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
-        PublisherRouter.publishCopiedFeedback(context)
+        CapsuleCoordinator.consume(context, intent.getStringExtra(EXTRA_EVENT_ID))
+        Toast.makeText(context, "验证码已复制", Toast.LENGTH_SHORT).show()
     }
 
     companion object {
         const val ACTION_COPY_OTP = "io.github.venompool888.fluidcapsule.action.COPY_OTP"
         const val EXTRA_OTP = "otp"
+        const val EXTRA_EVENT_ID = "event_id"
     }
 }

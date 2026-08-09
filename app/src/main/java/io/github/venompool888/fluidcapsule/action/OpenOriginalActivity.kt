@@ -2,13 +2,12 @@ package io.github.venompool888.fluidcapsule.action
 
 import android.app.Activity
 import android.app.ActivityOptions
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import io.github.venompool888.fluidcapsule.publisher.NotificationFactory
+import io.github.venompool888.fluidcapsule.publisher.CapsuleCoordinator
 
 class OpenOriginalActivity : Activity() {
     private var handled = false
@@ -28,8 +27,7 @@ class OpenOriginalActivity : Activity() {
         if (handled) return
         handled = true
 
-        getSystemService(NotificationManager::class.java)
-            .cancel(NotificationFactory.CAPSULE_NOTIFICATION_ID)
+        CapsuleCoordinator.consume(this, intent.getStringExtra(EXTRA_EVENT_ID))
 
         val original = if (Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableExtra(EXTRA_ORIGINAL_INTENT, PendingIntent::class.java)
@@ -86,5 +84,6 @@ class OpenOriginalActivity : Activity() {
         const val ACTION_OPEN_ORIGINAL = "io.github.venompool888.fluidcapsule.action.OPEN_ORIGINAL"
         const val EXTRA_ORIGINAL_INTENT = "original_intent"
         const val EXTRA_SOURCE_PACKAGE = "source_package"
+        const val EXTRA_EVENT_ID = "event_id"
     }
 }

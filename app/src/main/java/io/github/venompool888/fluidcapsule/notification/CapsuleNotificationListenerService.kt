@@ -15,10 +15,10 @@ import io.github.venompool888.fluidcapsule.integration.KnownNotificationAdapter
 import io.github.venompool888.fluidcapsule.integration.KnownNotificationDecision
 import io.github.venompool888.fluidcapsule.parser.OtpParseResult
 import io.github.venompool888.fluidcapsule.parser.OtpParser
+import io.github.venompool888.fluidcapsule.publisher.CapsuleCoordinator
 import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
 import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
 import io.github.venompool888.fluidcapsule.settings.UserSettings
-import java.util.UUID
 
 class CapsuleNotificationListenerService : NotificationListenerService() {
     private var lastMirroredSourceKey: String? = null
@@ -27,6 +27,13 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         DiagnosticsStore.markListenerConnected(this, true)
+        val recentCutoff = System.currentTimeMillis() - QUEUE_RETENTION_MILLIS
+        runCatching { activeNotifications.orEmpty().toList() }
+            .getOrDefault(emptyList())
+            .asSequence()
+            .filter { it.packageName != packageName && it.postTime >= recentCutoff }
+            .sortedBy { it.postTime }
+            .forEach { processNotification(it, currentRanking) }
     }
 
     override fun onListenerDisconnected() {
@@ -52,6 +59,9 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        if (sbn.packageName != packageName) {
+            CapsuleCoordinator.removeSourceEvent(this, sbn.key)
+        }
         if (sbn.key == lastMirroredSourceKey) {
             lastMirroredSourceKey = null
             lastSmartReplies = emptyList()
@@ -85,7 +95,7 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
                     this,
                     CapsuleEvent(
                         sourcePackage = normalized.packageName,
-                        eventId = UUID.randomUUID().toString(),
+                        eventId = normalized.notificationKey,
                         kind = CapsuleKind.OTP,
                         title = "验证码",
                         shortText = result.code,
@@ -179,7 +189,7 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
                     ?: CapsuleAction.None,
                 privacy = if (showContent) CapsulePrivacy.SHOW_FULL else CapsulePrivacy.HIDE_SENSITIVE,
                 createdAtMillis = now,
-                expiresAtMillis = now + 60_000L,
+                expiresAtMillis = now + QUEUE_RETENTION_MILLIS,
                 dedupeKey = normalized.notificationKey,
             ),
         )
@@ -203,4 +213,8 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         val smartReplies: List<String> = emptyList(),
         val smartActions: List<Notification.Action> = emptyList(),
     )
+
+    companion object {
+        private const val QUEUE_RETENTION_MILLIS = 5 * 60_000L
+    }
 }

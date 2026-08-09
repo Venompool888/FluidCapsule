@@ -13,6 +13,7 @@ Turn Android notifications into interactive capsules on supported ColorOS device
 - Extract one-time passwords from SMS notifications and display the code directly.
 - Copy an OTP by tapping its capsule, with an optional masked clipboard preview.
 - Mirror whitelisted notifications with the original app icon, sender avatar, title, and message.
+- Keep up to eight pending capsule events in memory: newer messages preempt the visible slot, while valid earlier messages return after the current one is opened, acted on, removed, or timed out.
 - Open the source notification and, when the source exposes Android `RemoteInput`, forward reply and mark-as-read actions.
 - Show one-tap smart replies and adapt the reply panel accent color to the source app icon.
 - Turn LocalSend transfer notifications and Meituan order updates into progress-aware capsules while filtering recognized Meituan promotions.
@@ -65,6 +66,8 @@ NotificationListenerService / package-scoped accessibility adapter
 Normalize → OTP parser / known-app adapter / whitelist policy
         ↓
 CapsuleEvent
+        ↓
+In-memory priority queue → one visible capsule slot
         ↓
 Promoted live notification or standard fallback
 ```

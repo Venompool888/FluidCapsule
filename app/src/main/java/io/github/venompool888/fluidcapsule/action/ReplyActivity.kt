@@ -2,7 +2,6 @@ package io.github.venompool888.fluidcapsule.action
 
 import android.app.Activity
 import android.app.Notification
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Intent
@@ -33,7 +32,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import io.github.venompool888.fluidcapsule.publisher.NotificationFactory
+import io.github.venompool888.fluidcapsule.publisher.CapsuleCoordinator
 
 class ReplyActivity : Activity() {
     private lateinit var replyInput: EditText
@@ -281,8 +280,7 @@ class ReplyActivity : Activity() {
         RemoteInput.addResultsToIntent(remoteInputs, fillInIntent, results)
         try {
             sourceAction.actionIntent.send(this, 0, fillInIntent)
-            getSystemService(NotificationManager::class.java)
-                .cancel(NotificationFactory.CAPSULE_NOTIFICATION_ID)
+            CapsuleCoordinator.consume(this, intent.getStringExtra(EXTRA_EVENT_ID))
             finish()
         } catch (_: PendingIntent.CanceledException) {
             Toast.makeText(this, "原回复动作已失效", Toast.LENGTH_SHORT).show()
@@ -420,6 +418,7 @@ class ReplyActivity : Activity() {
         const val EXTRA_CONVERSATION_TITLE = "conversation_title"
         const val EXTRA_SOURCE_LABEL = "source_label"
         const val EXTRA_SOURCE_PACKAGE = "source_package"
+        const val EXTRA_EVENT_ID = "event_id"
         const val EXTRA_ORIGINAL_MESSAGE = "original_message"
         const val EXTRA_SMART_REPLIES = "smart_replies"
         private val DEFAULT_ACCENT = Color.rgb(0, 122, 112)
