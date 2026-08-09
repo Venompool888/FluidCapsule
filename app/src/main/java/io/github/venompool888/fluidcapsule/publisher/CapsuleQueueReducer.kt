@@ -36,7 +36,7 @@ internal class CapsuleQueueReducer(
     fun current(now: Long): CapsuleEvent? {
         purgeExpired(now)
         return entries.values.maxWithOrNull(
-            compareBy<Entry> { priority(it.event.kind) }
+            compareBy<Entry> { priority(it.event.kind) + it.event.priorityAdjustment * 20 }
                 .thenBy { it.sequence },
         )?.event
     }

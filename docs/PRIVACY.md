@@ -20,7 +20,9 @@ The switch controls future writes only:
 
 Updates to one still-active notification replace that notification's current history row instead of creating an entry for every progress or network-speed refresh. Once Android reports the notification as removed, a later notification with the same system key begins a new history entry.
 
-History stays on the device and is not included in diagnostic output. The app has backups disabled. Existing history remains until the app data is cleared or the app is uninstalled; a user-facing delete control is not part of the current version.
+History stays on the device and is not included in diagnostic output. The app has backups disabled. History follows a user-selected 1–30 day local retention period and can be deleted by entry, source app, or in full. The same lifecycle operations are exposed through the protected ADB CLI. Each source app can also opt out of local history independently.
+
+History stores the local routing outcome and a short explanation such as “not whitelisted” or “OTP-only rule did not recognize a reliable code”. This diagnostic explanation never leaves the device.
 
 ## Notification posting
 

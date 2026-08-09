@@ -80,7 +80,7 @@ internal object NotificationFactory {
         }
 
         val subText = when (event.action) {
-            is CapsuleAction.CopySensitiveText -> "点击复制"
+            is CapsuleAction.CopySensitiveText -> event.sourceLabel ?: "点击复制"
             is CapsuleAction.OpenOriginal -> event.sourceLabel
             CapsuleAction.None -> null
         }

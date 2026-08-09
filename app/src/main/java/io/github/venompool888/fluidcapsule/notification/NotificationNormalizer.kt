@@ -66,6 +66,7 @@ object NotificationNormalizer {
             actions = notification.actions?.toList().orEmpty(),
             isGroupSummary = notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
             isOngoing = sbn.isOngoing,
+            channelId = notification.channelId.orEmpty(),
         )
     }
 

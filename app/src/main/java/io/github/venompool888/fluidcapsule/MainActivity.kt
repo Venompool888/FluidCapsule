@@ -2,6 +2,7 @@ package io.github.venompool888.fluidcapsule
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.res.ColorStateList
@@ -10,11 +11,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.Gravity
@@ -24,6 +28,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.view.WindowInsets
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.Button
 import android.widget.BaseAdapter
 import android.widget.FrameLayout
@@ -31,6 +37,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -45,6 +52,7 @@ import io.github.venompool888.fluidcapsule.history.NotificationHistoryStore
 import io.github.venompool888.fluidcapsule.keepalive.KeepAliveService
 import io.github.venompool888.fluidcapsule.notification.CapsuleNotificationListenerService
 import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
+import io.github.venompool888.fluidcapsule.settings.CapsuleDisplayDuration
 import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
 import io.github.venompool888.fluidcapsule.settings.UserSettings
 import io.github.venompool888.fluidcapsule.settings.WhitelistActivity
@@ -52,130 +60,46 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
     private lateinit var statusView: TextView
     private lateinit var notificationPermissionButton: Button
-    private lateinit var whitelistButton: Button
+    private lateinit var whitelistCountView: TextView
+    private lateinit var whitelistSummaryView: TextView
     private lateinit var homePage: View
+    private lateinit var rulesPage: View
     private lateinit var historyPage: View
+    private lateinit var backendPage: View
     private lateinit var pageHost: FrameLayout
-    private lateinit var homeTab: TextView
-    private lateinit var historyTab: TextView
+    private lateinit var homeTab: NavigationTab
+    private lateinit var rulesTab: NavigationTab
+    private lateinit var historyTab: NavigationTab
+    private lateinit var backendTab: NavigationTab
     private lateinit var historyCountView: TextView
     private lateinit var historyEmptyView: TextView
+    private lateinit var historyListView: ListView
     private lateinit var historyAdapter: NotificationHistoryAdapter
     private lateinit var historySortTimeTab: TextView
     private lateinit var historySortCountTab: TextView
     private var currentPage = Page.HOME
     private var historySortMode = HistorySortMode.TIME
     private var expandedHistoryPackage: String? = null
+    private val historyIconLoader = Executors.newFixedThreadPool(2)
+    private val historyIconHandler = Handler(Looper.getMainLooper())
+    private val historyIconRequests = ConcurrentHashMap.newKeySet<String>()
+    private val historyIconCache = object : android.util.LruCache<String, Drawable>(96) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         title = "流体胶囊"
         configureSystemBars()
 
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), 0, dp(20), dp(12))
-        }
-        content.addView(buildHero(), matchWidthWrapHeight())
-        content.addView(buildFlowCard(), matchWidthWrapHeight().apply { topMargin = dp(14) })
-
-        addSectionLabel(content, "运行状态", "通知链路与系统授权")
-        val statusCard = card().apply {
-            statusView = TextView(this@MainActivity).apply {
-                textSize = 13f
-                typeface = Typeface.MONOSPACE
-                setTextColor(COLOR_TEXT_SECONDARY)
-                setLineSpacing(dp(2).toFloat(), 1f)
-                setPadding(dp(16), dp(15), dp(16), dp(15))
-                background = rounded(COLOR_STATUS_FILL, 14f)
-            }
-            addView(statusView, matchWidthWrapHeight())
-        }
-        content.addView(statusCard, matchWidthWrapHeight())
-
-        addSectionLabel(content, "隐私显示", "控制锁屏、胶囊和剪贴板中的敏感内容")
-        val privacyCard = card()
-        privacyCard.addSettingRow(
-            title = "直接显示验证码",
-            summary = "包含锁屏胶囊；关闭后仍可点击复制",
-            checked = UserSettings.showOtpDirectly(this),
-        ) { checked ->
-            UserSettings.setShowOtpDirectly(this, checked)
-            toast(if (checked) "将直接显示验证码" else "将隐藏验证码，点击仍可复制")
-        }
-        privacyCard.addDivider()
-        privacyCard.addSettingRow(
-            title = "隐藏剪贴板预览",
-            summary = "复制验证码时，用掩码保护系统预览",
-            checked = UserSettings.maskOtpClipboardPreview(this),
-        ) { checked ->
-            UserSettings.setMaskOtpClipboardPreview(this, checked)
-            toast(if (checked) "复制提示将打码" else "复制提示将直接显示验证码")
-        }
-        privacyCard.addDivider()
-        privacyCard.addSettingRow(
-            title = "白名单显示正文",
-            summary = "包含锁屏；适用于已信任的通知来源",
-            checked = UserSettings.showWhitelistContent(this),
-        ) { checked ->
-            UserSettings.setShowWhitelistContent(this, checked)
-            toast(if (checked) "白名单通知将直接显示正文" else "锁屏将隐藏白名单通知正文")
-        }
-        content.addView(privacyCard, matchWidthWrapHeight())
-
-        addSectionLabel(content, "快速设置", "按顺序完成通知权限与来源配置")
-        val setupCard = card()
-        setupCard.addActionButton("1. 授予通知读取权限", ButtonTone.PRIMARY) {
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-        }
-        notificationPermissionButton = setupCard.addActionButton("2. 授予通知发布权限") {
-            requestNotificationPermissionOrOpenSettings()
-        }
-        whitelistButton = setupCard.addActionButton("管理通知岛白名单") {
-            whitelistButton.text = "正在打开白名单…"
-            whitelistButton.isEnabled = false
-            startActivity(Intent(this, WhitelistActivity::class.java))
-        }
-        setupCard.addActionButton("3. 发布测试验证码 482913", ButtonTone.ACCENT) {
-            publishTestOtp()
-        }
-        content.addView(setupCard, matchWidthWrapHeight())
-
-        addSectionLabel(content, "后台与诊断", "需要时再调整，日常无需反复操作")
-        val toolsCard = card()
-        toolsCard.addActionButton("开启前台保活", ButtonTone.PRIMARY) { startKeepAlive() }
-        toolsCard.addActionButton("关闭前台保活") { stopKeepAlive() }
-        toolsCard.addActionButton("打开无障碍保活设置") {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-        toolsCard.addActionButton("申请忽略电池优化") {
-            startActivity(
-                Intent(
-                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                    Uri.parse("package:$packageName"),
-                ),
-            )
-        }
-        if (Build.VERSION.SDK_INT >= 36) {
-            toolsCard.addActionButton("打开实时通知提升设置") { openPromotionSettingsSafely() }
-        }
-        toolsCard.addActionButton("刷新诊断状态", ButtonTone.QUIET) { refreshStatus() }
-        content.addView(toolsCard, matchWidthWrapHeight().apply { bottomMargin = dp(8) })
-
-        homePage = ScrollView(this).apply {
-            isFillViewport = true
-            clipToPadding = false
-            setBackgroundColor(COLOR_PAGE)
-            addView(content, ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ))
-        }
+        homePage = buildHomePage()
+        rulesPage = buildRulesPage().apply { visibility = View.GONE }
         historyPage = buildHistoryPage().apply { visibility = View.GONE }
+        backendPage = buildBackendPage().apply { visibility = View.GONE }
         pageHost = FrameLayout(this).apply {
             setBackgroundColor(COLOR_PAGE)
             addView(homePage, FrameLayout.LayoutParams(
@@ -183,6 +107,14 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ))
             addView(historyPage, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ))
+            addView(rulesPage, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ))
+            addView(backendPage, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ))
@@ -223,12 +155,160 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         applySystemBarInsets(root, pageHost, bottomNavigation, statusBarScrim, navigationBarScrim)
+        pageHost.alpha = 0.72f
+        pageHost.translationY = dp(10).toFloat()
+        pageHost.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(240)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
     }
 
     override fun onResume() {
         super.onResume()
         refreshStatus()
         if (currentPage == Page.HISTORY) refreshHistory()
+    }
+
+    override fun onDestroy() {
+        historyIconLoader.shutdownNow()
+        super.onDestroy()
+    }
+
+    private fun buildHomePage(): View {
+        val content = pageContent()
+        content.addView(buildHero(), matchWidthWrapHeight())
+        content.addView(buildFlowCard(), matchWidthWrapHeight().apply { topMargin = dp(14) })
+        addSectionLabel(content, "快速设置", "按顺序完成系统授权与功能测试")
+        val setupCard = card()
+        setupCard.addActionButton("1. 授予通知读取权限", ButtonTone.PRIMARY) {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+        notificationPermissionButton = setupCard.addActionButton("2. 授予通知发布权限") {
+            requestNotificationPermissionOrOpenSettings()
+        }
+        setupCard.addActionButton("3. 发布测试验证码 482913", ButtonTone.ACCENT) {
+            publishTestOtp()
+        }
+        content.addView(setupCard, matchWidthWrapHeight().apply { bottomMargin = dp(8) })
+        return scrollPage(content)
+    }
+
+    private fun buildRulesPage(): View {
+        val content = pageContent()
+        content.addPageHeader("规则", "通知来源、显示时长与隐私")
+
+        addSectionLabel(content, "通知来源", "选择允许转换为流体云的应用")
+        content.addView(buildWhitelistManagementCard(), matchWidthWrapHeight())
+
+        addSectionLabel(content, "胶囊时长", "控制 QQ、微信等消息在流体云中的停留时间")
+        val durationCard = card()
+        durationCard.addDisplayDurationSetting()
+        content.addView(durationCard, matchWidthWrapHeight())
+
+        addSectionLabel(content, "隐私显示", "控制锁屏、胶囊和剪贴板中的敏感内容")
+        val privacyCard = card()
+        privacyCard.addSettingRow(
+            title = "直接显示验证码",
+            summary = "包含锁屏胶囊；关闭后仍可点击复制",
+            checked = UserSettings.showOtpDirectly(this),
+        ) { checked ->
+            UserSettings.setShowOtpDirectly(this, checked)
+            toast(if (checked) "将直接显示验证码" else "将隐藏验证码，点击仍可复制")
+        }
+        privacyCard.addDivider()
+        privacyCard.addSettingRow(
+            title = "隐藏剪贴板预览",
+            summary = "复制验证码时，用掩码保护系统预览",
+            checked = UserSettings.maskOtpClipboardPreview(this),
+        ) { checked ->
+            UserSettings.setMaskOtpClipboardPreview(this, checked)
+            toast(if (checked) "复制提示将打码" else "复制提示将直接显示验证码")
+        }
+        privacyCard.addDivider()
+        privacyCard.addSettingRow(
+            title = "白名单显示正文",
+            summary = "包含锁屏；适用于已信任的通知来源",
+            checked = UserSettings.showWhitelistContent(this),
+        ) { checked ->
+            UserSettings.setShowWhitelistContent(this, checked)
+            toast(if (checked) "白名单通知将直接显示正文" else "锁屏将隐藏白名单通知正文")
+        }
+        content.addView(privacyCard, matchWidthWrapHeight().apply { bottomMargin = dp(8) })
+        return scrollPage(content)
+    }
+
+    private fun buildBackendPage(): View {
+        val content = pageContent()
+        content.addPageHeader("后台与诊断", "保活设置、系统能力与运行记录")
+
+        addSectionLabel(content, "运行状态", "通知链路与系统授权")
+        val statusCard = card().apply {
+            statusView = TextView(this@MainActivity).apply {
+                textSize = 13f
+                typeface = Typeface.MONOSPACE
+                setTextColor(COLOR_TEXT_SECONDARY)
+                setLineSpacing(dp(2).toFloat(), 1f)
+                setPadding(dp(16), dp(15), dp(16), dp(15))
+                background = rounded(COLOR_STATUS_FILL, 14f)
+            }
+            addView(statusView, matchWidthWrapHeight())
+        }
+        content.addView(statusCard, matchWidthWrapHeight())
+
+        addSectionLabel(content, "后台工具", "需要时再调整，日常无需反复操作")
+        val toolsCard = card()
+        toolsCard.addActionButton("开启前台保活", ButtonTone.PRIMARY) { startKeepAlive() }
+        toolsCard.addActionButton("关闭前台保活") { stopKeepAlive() }
+        toolsCard.addActionButton("打开无障碍保活设置") {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+        toolsCard.addActionButton("申请忽略电池优化") {
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName"),
+                ),
+            )
+        }
+        if (Build.VERSION.SDK_INT >= 36) {
+            toolsCard.addActionButton("打开实时通知提升设置") { openPromotionSettingsSafely() }
+        }
+        toolsCard.addActionButton("刷新诊断状态", ButtonTone.QUIET) { refreshStatus() }
+        content.addView(toolsCard, matchWidthWrapHeight().apply { bottomMargin = dp(8) })
+        return scrollPage(content)
+    }
+
+    private fun pageContent() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(20), 0, dp(20), dp(12))
+    }
+
+    private fun scrollPage(content: View): View = ScrollView(this).apply {
+        isFillViewport = true
+        clipToPadding = false
+        setBackgroundColor(COLOR_PAGE)
+        addView(content, ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+    }
+
+    private fun LinearLayout.addPageHeader(title: String, summary: String) {
+        addView(TextView(this@MainActivity).apply {
+            text = title
+            textSize = 26f
+            setTextColor(COLOR_TEXT_PRIMARY)
+            setTypeface(typeface, Typeface.BOLD)
+            includeFontPadding = false
+        }, matchWidthWrapHeight())
+        addView(TextView(this@MainActivity).apply {
+            text = summary
+            textSize = 13f
+            setTextColor(COLOR_TEXT_TERTIARY)
+            setPadding(0, dp(5), 0, dp(3))
+        }, matchWidthWrapHeight())
     }
 
     private fun buildHero(): View = LinearLayout(this).apply {
@@ -285,51 +365,149 @@ class MainActivity : Activity() {
     private fun buildBottomNavigation(): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
-        setPadding(dp(7), dp(7), dp(7), dp(7))
+        setPadding(dp(6), dp(6), dp(6), dp(6))
         background = rounded(Color.WHITE, 22f, COLOR_BORDER, 1)
         elevation = dp(12).toFloat()
 
-        homeTab = buildNavigationTab("首页\nHome") { showPage(Page.HOME) }
-        historyTab = buildNavigationTab("通知历史记录\nNotification History") { showPage(Page.HISTORY) }
-        addView(homeTab, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
-        addView(historyTab, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
-            marginStart = dp(6)
-        })
+        homeTab = buildNavigationTab("首页", R.drawable.ic_nav_home) { showPage(Page.HOME) }
+        rulesTab = buildNavigationTab("规则", R.drawable.ic_nav_rules) { showPage(Page.RULES) }
+        historyTab = buildNavigationTab("历史", R.drawable.ic_nav_history) { showPage(Page.HISTORY) }
+        backendTab = buildNavigationTab("后台", R.drawable.ic_nav_backend) { showPage(Page.BACKEND) }
+        listOf(homeTab, rulesTab, historyTab, backendTab).forEachIndexed { index, tab ->
+            addView(tab.root, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                if (index > 0) marginStart = dp(3)
+            })
+        }
         updateNavigationSelection()
     }
 
-    private fun buildNavigationTab(label: String, action: () -> Unit): TextView =
-        TextView(this).apply {
-            text = label
-            textSize = 12f
+    private fun buildNavigationTab(
+        label: String,
+        iconRes: Int,
+        action: () -> Unit,
+    ): NavigationTab {
+        val icon = ImageView(this).apply {
+            setImageResource(iconRes)
+            imageTintList = ColorStateList.valueOf(COLOR_TEXT_TERTIARY)
+            contentDescription = "$label 图标"
+        }
+        val text = TextView(this).apply {
+            this.text = label
+            textSize = 11f
             gravity = Gravity.CENTER
-            setTextColor(COLOR_TEXT_SECONDARY)
+            setTextColor(COLOR_TEXT_TERTIARY)
             setTypeface(typeface, Typeface.BOLD)
-            setLineSpacing(0f, 0.94f)
+            includeFontPadding = false
+        }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
             background = rounded(Color.TRANSPARENT, 16f)
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        view.animate().alpha(0.72f).setDuration(55).start()
+                        icon.animate().scaleX(0.82f).scaleY(0.82f).setDuration(55).start()
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.animate().alpha(1f).setDuration(130).start()
+                        icon.animate().scaleX(1f).scaleY(1f).setDuration(180)
+                            .setInterpolator(OvershootInterpolator(1.25f)).start()
+                    }
+                }
+                false
+            }
             setOnClickListener {
                 performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 action()
             }
+            addView(icon, LinearLayout.LayoutParams(dp(23), dp(23)))
+            addView(text, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(3) })
         }
+        return NavigationTab(root, icon, text)
+    }
 
     private fun showPage(page: Page) {
+        if (page == currentPage) return
+        val direction = if (page.ordinal > currentPage.ordinal) 1f else -1f
+        pageView(currentPage).apply {
+            animate().cancel()
+            visibility = View.GONE
+            alpha = 1f
+            translationX = 0f
+        }
         currentPage = page
-        homePage.visibility = if (page == Page.HOME) View.VISIBLE else View.GONE
-        historyPage.visibility = if (page == Page.HISTORY) View.VISIBLE else View.GONE
+        pageView(page).apply {
+            animate().cancel()
+            alpha = 0.25f
+            translationX = direction * dp(18)
+            visibility = View.VISIBLE
+            animate()
+                .alpha(1f)
+                .translationX(0f)
+                .setDuration(210)
+                .setInterpolator(DecelerateInterpolator())
+                .start()
+        }
         updateNavigationSelection()
         if (page == Page.HISTORY) refreshHistory()
+        if (page == Page.BACKEND) refreshStatus()
+    }
+
+    private fun pageView(page: Page): View = when (page) {
+        Page.HOME -> homePage
+        Page.RULES -> rulesPage
+        Page.HISTORY -> historyPage
+        Page.BACKEND -> backendPage
     }
 
     private fun updateNavigationSelection() {
-        if (!::homeTab.isInitialized || !::historyTab.isInitialized) return
+        if (!::homeTab.isInitialized || !::rulesTab.isInitialized ||
+            !::historyTab.isInitialized || !::backendTab.isInitialized
+        ) return
         styleNavigationTab(homeTab, currentPage == Page.HOME)
+        styleNavigationTab(rulesTab, currentPage == Page.RULES)
         styleNavigationTab(historyTab, currentPage == Page.HISTORY)
+        styleNavigationTab(backendTab, currentPage == Page.BACKEND)
     }
 
-    private fun styleNavigationTab(tab: TextView, selected: Boolean) {
-        tab.setTextColor(if (selected) COLOR_PRIMARY_DARK else COLOR_TEXT_TERTIARY)
-        tab.background = rounded(if (selected) COLOR_ACCENT_SOFT else Color.TRANSPARENT, 16f)
+    private fun styleNavigationTab(tab: NavigationTab, selected: Boolean) {
+        val color = if (selected) COLOR_PRIMARY_DARK else COLOR_TEXT_TERTIARY
+        tab.icon.imageTintList = ColorStateList.valueOf(color)
+        tab.label.setTextColor(color)
+        tab.root.background = rounded(if (selected) COLOR_ACCENT_SOFT else Color.TRANSPARENT, 16f)
+        if (tab.selected == selected) return
+        tab.selected = selected
+        tab.root.animate().cancel()
+        tab.icon.animate().cancel()
+        if (selected) {
+            tab.root.alpha = 0.72f
+            tab.root.scaleX = 0.94f
+            tab.root.scaleY = 0.94f
+            tab.root.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(220)
+                .setInterpolator(OvershootInterpolator(1.15f))
+                .start()
+            tab.icon.rotation = -9f
+            tab.icon.scaleX = 0.78f
+            tab.icon.scaleY = 0.78f
+            tab.icon.animate()
+                .rotation(0f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(240)
+                .setInterpolator(OvershootInterpolator(1.45f))
+                .start()
+        } else {
+            tab.root.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(120).start()
+            tab.icon.animate().rotation(0f).scaleX(1f).scaleY(1f).setDuration(120).start()
+        }
     }
 
     private fun buildHistoryPage(): View {
@@ -365,6 +543,23 @@ class MainActivity : Activity() {
             refreshHistory()
         }
         page.addView(recordingCard, matchWidthWrapHeight())
+
+        val privacyCard = card()
+        privacyCard.addHistoryRetentionSetting()
+        privacyCard.addActionButton("清空全部通知历史", ButtonTone.QUIET) {
+            AlertDialog.Builder(this)
+                .setTitle("清空通知历史？")
+                .setMessage("这会永久删除本机保存的全部通知正文和处理结果。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("清空") { _, _ ->
+                    val deleted = NotificationHistoryStore.clear(this)
+                    expandedHistoryPackage = null
+                    refreshHistory(animate = true)
+                    toast("已删除 $deleted 条历史")
+                }
+                .show()
+        }
+        page.addView(privacyCard, matchWidthWrapHeight().apply { topMargin = dp(10) })
 
         historySortMode = HistorySortMode.fromStorageValue(
             UserSettings.notificationHistorySortMode(this),
@@ -413,10 +608,10 @@ class MainActivity : Activity() {
             } else {
                 sourcePackage
             }
-            refreshHistory()
+            refreshHistory(animate = true)
         }
         val listFrame = FrameLayout(this)
-        val list = ListView(this).apply {
+        historyListView = ListView(this).apply {
             adapter = historyAdapter
             divider = null
             dividerHeight = dp(10)
@@ -425,7 +620,7 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.TRANSPARENT)
             isVerticalScrollBarEnabled = false
         }
-        listFrame.addView(list, FrameLayout.LayoutParams(
+        listFrame.addView(historyListView, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT,
         ))
@@ -457,6 +652,7 @@ class MainActivity : Activity() {
             textSize = 13f
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
+            setOnTouchListener(subtlePressAnimator())
             setOnClickListener {
                 performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 action()
@@ -469,7 +665,7 @@ class MainActivity : Activity() {
         expandedHistoryPackage = null
         UserSettings.setNotificationHistorySortMode(this, mode.storageValue)
         updateHistorySortSelection()
-        refreshHistory()
+        refreshHistory(animate = true)
     }
 
     private fun updateHistorySortSelection() {
@@ -483,7 +679,7 @@ class MainActivity : Activity() {
         tab.background = rounded(if (selected) COLOR_ACCENT_SOFT else COLOR_CONTROL, 13f)
     }
 
-    private fun refreshHistory() {
+    private fun refreshHistory(animate: Boolean = false) {
         if (!::historyAdapter.isInitialized) return
         val total = NotificationHistoryStore.count(this)
         val rows: List<HistoryListItem>
@@ -518,6 +714,7 @@ class MainActivity : Activity() {
             }
         }
         historyAdapter.replace(rows)
+        if (animate) animateHistoryList()
         historyCountView.text = buildString {
             append(if (UserSettings.notificationHistoryEnabled(this@MainActivity)) "● 正在记录" else "○ 记录已关闭")
             append("  ·  共 $total 条")
@@ -529,6 +726,53 @@ class MainActivity : Activity() {
             }
         }
         historyEmptyView.visibility = if (total == 0L) View.VISIBLE else View.GONE
+    }
+
+    private fun animateHistoryList() {
+        if (!::historyListView.isInitialized) return
+        historyListView.animate().cancel()
+        historyListView.alpha = 0.45f
+        historyListView.translationY = dp(9).toFloat()
+        historyListView.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(190)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
+    }
+
+    private fun decisionLabel(decision: String): String = when (decision) {
+        "PUBLISHED" -> "● 已提交上云"
+        "FILTERED" -> "● 已被规则过滤"
+        "SKIPPED" -> "● 未上云"
+        "CAPTURED" -> "● 正在处理"
+        else -> "● 处理结果未知"
+    }
+
+    private fun confirmDeleteHistoryEntry(entry: NotificationHistoryEntry) {
+        AlertDialog.Builder(this)
+            .setTitle("删除这条通知？")
+            .setMessage("${entry.sourceLabel} · ${entry.title.ifBlank { "无标题" }}")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("删除") { _, _ ->
+                NotificationHistoryStore.deleteEntry(this, entry.id)
+                refreshHistory(animate = true)
+            }
+            .show()
+    }
+
+    private fun confirmDeleteHistoryPackage(sourcePackage: String, sourceLabel: String) {
+        AlertDialog.Builder(this)
+            .setTitle("删除 ${sourceLabel.ifBlank { sourcePackage }} 的历史？")
+            .setMessage("只删除本机历史，不会修改该应用的白名单或专属规则。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton("删除") { _, _ ->
+                val deleted = NotificationHistoryStore.deletePackage(this, sourcePackage)
+                expandedHistoryPackage = null
+                refreshHistory(animate = true)
+                toast("已删除 $deleted 条历史")
+            }
+            .show()
     }
 
     private fun addSectionLabel(parent: LinearLayout, title: String, subtitle: String) {
@@ -556,6 +800,75 @@ class MainActivity : Activity() {
         setPadding(dp(12), dp(12), dp(12), dp(12))
         background = rounded(Color.WHITE, 20f, COLOR_BORDER, 1)
         elevation = dp(1).toFloat()
+    }
+
+    private fun buildWhitelistManagementCard(): View = card().apply {
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+        val row = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = RippleDrawable(
+                ColorStateList.valueOf(COLOR_RIPPLE),
+                rounded(COLOR_STATUS_FILL, 16f),
+                rounded(Color.WHITE, 16f),
+            )
+        }
+        whitelistCountView = TextView(this@MainActivity).apply {
+            textSize = 19f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setTypeface(typeface, Typeface.BOLD)
+            background = rounded(COLOR_PRIMARY, 15f)
+            contentDescription = "已选择应用数量"
+        }
+        row.addView(whitelistCountView, LinearLayout.LayoutParams(dp(54), dp(54)))
+
+        val labels = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), 0, dp(8), 0)
+        }
+        labels.addView(TextView(this@MainActivity).apply {
+            text = "管理通知来源"
+            textSize = 16f
+            setTextColor(COLOR_TEXT_PRIMARY)
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        whitelistSummaryView = TextView(this@MainActivity).apply {
+            textSize = 12f
+            setTextColor(COLOR_TEXT_TERTIARY)
+            setPadding(0, dp(3), 0, 0)
+        }
+        labels.addView(whitelistSummaryView)
+        row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+        row.addView(TextView(this@MainActivity).apply {
+            text = "管理  ›"
+            textSize = 14f
+            setTextColor(COLOR_PRIMARY_DARK)
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER_VERTICAL
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            dp(48),
+        ))
+        row.setOnClickListener {
+            row.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            startActivity(Intent(this@MainActivity, WhitelistActivity::class.java))
+        }
+        addView(row, matchWidthWrapHeight())
+        refreshWhitelistSummary()
+    }
+
+    private fun refreshWhitelistSummary() {
+        if (!::whitelistCountView.isInitialized || !::whitelistSummaryView.isInitialized) return
+        val count = NotificationWhitelist.packages(this).size
+        whitelistCountView.text = count.toString()
+        whitelistSummaryView.text = if (count == 0) {
+            "尚未选择应用"
+        } else {
+            "已选择 $count 个应用 · 点击查看或修改"
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -606,6 +919,121 @@ class MainActivity : Activity() {
                 marginEnd = dp(5)
             },
         )
+    }
+
+    private fun LinearLayout.addDisplayDurationSetting() {
+        val currentMinutes = UserSettings.capsuleDisplayDurationMinutes(this@MainActivity)
+        addView(TextView(this@MainActivity).apply {
+            text = "单条胶囊显示时长"
+            textSize = 16f
+            setTextColor(COLOR_TEXT_PRIMARY)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(5), dp(7), dp(5), 0)
+        }, matchWidthWrapHeight())
+        addView(TextView(this@MainActivity).apply {
+            text = "1–30 分钟连续可调；从下一条胶囊开始生效"
+            textSize = 12f
+            setTextColor(COLOR_TEXT_TERTIARY)
+            setPadding(dp(5), dp(4), dp(5), dp(6))
+        }, matchWidthWrapHeight())
+
+        val valueView = TextView(this@MainActivity).apply {
+            text = "$currentMinutes 分钟"
+            textSize = 24f
+            gravity = Gravity.CENTER
+            setTextColor(COLOR_PRIMARY_DARK)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(4), 0, 0)
+        }
+        addView(valueView, matchWidthWrapHeight())
+
+        var selectedMinutes = currentMinutes
+        val slider = SeekBar(this@MainActivity).apply {
+            max = CapsuleDisplayDuration.maxMinutes - CapsuleDisplayDuration.minMinutes
+            progress = currentMinutes - CapsuleDisplayDuration.minMinutes
+            contentDescription = "胶囊显示时长"
+            setPadding(dp(3), 0, dp(3), 0)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    selectedMinutes = progress + CapsuleDisplayDuration.minMinutes
+                    valueView.text = "$selectedMinutes 分钟"
+                    contentDescription = "胶囊显示 $selectedMinutes 分钟"
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    UserSettings.setCapsuleDisplayDurationMinutes(
+                        this@MainActivity,
+                        selectedMinutes,
+                    )
+                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    toast("胶囊将显示 $selectedMinutes 分钟")
+                }
+            })
+        }
+        addView(slider, matchWidthWrapHeight())
+
+        val rangeLabels = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(9), 0, dp(9), dp(5))
+        }
+        rangeLabels.addView(TextView(this@MainActivity).apply {
+            text = "${CapsuleDisplayDuration.minMinutes} 分钟"
+            textSize = 11f
+            setTextColor(COLOR_TEXT_TERTIARY)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        rangeLabels.addView(TextView(this@MainActivity).apply {
+            text = "${CapsuleDisplayDuration.maxMinutes} 分钟"
+            textSize = 11f
+            gravity = Gravity.END
+            setTextColor(COLOR_TEXT_TERTIARY)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(rangeLabels, matchWidthWrapHeight())
+    }
+
+    private fun LinearLayout.addHistoryRetentionSetting() {
+        val currentDays = UserSettings.notificationHistoryRetentionDays(this@MainActivity)
+        addView(TextView(this@MainActivity).apply {
+            text = "自动保留时间"
+            textSize = 16f
+            setTextColor(COLOR_TEXT_PRIMARY)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(5), dp(7), dp(5), 0)
+        }, matchWidthWrapHeight())
+        val valueView = TextView(this@MainActivity).apply {
+            text = "$currentDays 天"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(COLOR_PRIMARY_DARK)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(7), 0, 0)
+        }
+        addView(valueView, matchWidthWrapHeight())
+        var selectedDays = currentDays
+        addView(SeekBar(this@MainActivity).apply {
+            max = 29
+            progress = currentDays - 1
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    selectedDays = progress + 1
+                    valueView.text = "$selectedDays 天"
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    UserSettings.setNotificationHistoryRetentionDays(this@MainActivity, selectedDays)
+                    val deleted = NotificationHistoryStore.purgeOlderThanDays(this@MainActivity, selectedDays)
+                    refreshHistory(animate = deleted > 0)
+                    toast("历史将保留 $selectedDays 天")
+                }
+            })
+        }, matchWidthWrapHeight())
+        addView(TextView(this@MainActivity).apply {
+            text = "长按单条记录或应用分组也可以单独删除"
+            textSize = 12f
+            setTextColor(COLOR_TEXT_TERTIARY)
+            setPadding(dp(5), 0, dp(5), dp(7))
+        }, matchWidthWrapHeight())
     }
 
     private fun LinearLayout.addActionButton(
@@ -771,8 +1199,7 @@ class MainActivity : Activity() {
         } else {
             "2. 授予通知发布权限"
         }
-        whitelistButton.text = "管理通知岛白名单（已选 ${NotificationWhitelist.packages(this).size} 个）"
-        whitelistButton.isEnabled = true
+        refreshWhitelistSummary()
 
         statusView.text = buildString {
             appendLine(statusLine("通知发布", manager.areNotificationsEnabled()))
@@ -857,6 +1284,17 @@ class MainActivity : Activity() {
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
+    private fun subtlePressAnimator(scale: Float = 0.975f) = View.OnTouchListener { view, event ->
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> view.animate()
+                .scaleX(scale).scaleY(scale).alpha(0.82f).setDuration(65).start()
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.animate()
+                .scaleX(1f).scaleY(1f).alpha(1f).setDuration(150)
+                .setInterpolator(OvershootInterpolator(1.1f)).start()
+        }
+        false
+    }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private inner class NotificationHistoryAdapter(
@@ -887,10 +1325,23 @@ class MainActivity : Activity() {
         }
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            return when (val item = getItem(position)) {
+            val isNew = convertView == null
+            val view = when (val item = getItem(position)) {
                 is HistoryListItem.Entry -> bindHistoryEntry(item, convertView)
                 is HistoryListItem.AppGroup -> bindAppGroup(item, convertView)
             }
+            if (isNew) {
+                view.alpha = 0f
+                view.translationY = dp(8).toFloat()
+                view.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setStartDelay((position.coerceAtMost(5) * 20L))
+                    .setDuration(180)
+                    .setInterpolator(DecelerateInterpolator())
+                    .start()
+            }
+            return view
         }
 
         private fun bindHistoryEntry(item: HistoryListItem.Entry, convertView: View?): View {
@@ -910,6 +1361,7 @@ class MainActivity : Activity() {
                 1,
             )
             row.setOnClickListener(null)
+            bindHistoryIcon(holder.icon, entry.sourcePackage, entry.sourceLabel)
             holder.source.text = entry.sourceLabel.ifBlank { entry.sourcePackage }
             holder.time.text = timeFormat.format(Date(entry.postedAtMillis))
             holder.title.text = entry.title
@@ -919,7 +1371,12 @@ class MainActivity : Activity() {
                 .takeIf(String::isNotBlank)
                 ?: entry.combinedText.takeIf(String::isNotBlank)
                 ?: "通知没有可显示的正文"
-            holder.packageName.text = entry.sourcePackage
+            holder.packageName.maxLines = 3
+            holder.packageName.text = "${decisionLabel(entry.decision)} · ${entry.decisionDetail}\n${entry.sourcePackage}"
+            row.setOnLongClickListener {
+                confirmDeleteHistoryEntry(entry)
+                true
+            }
             return row
         }
 
@@ -933,6 +1390,7 @@ class MainActivity : Activity() {
                 if (item.expanded) COLOR_PRIMARY else COLOR_BORDER,
                 1,
             )
+            bindHistoryIcon(holder.icon, group.sourcePackage, group.sourceLabel)
             holder.source.text = group.sourceLabel.ifBlank { group.sourcePackage }
             holder.count.text = "${group.notificationCount} 条通知"
             holder.latest.text = "最近 ${timeFormat.format(Date(group.latestCapturedAtMillis))}"
@@ -942,14 +1400,28 @@ class MainActivity : Activity() {
                 row.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 onGroupClicked(group.sourcePackage)
             }
+            row.setOnLongClickListener {
+                confirmDeleteHistoryPackage(group.sourcePackage, group.sourceLabel)
+                true
+            }
             return row
         }
 
         private fun buildHistoryRow(): View {
             val row = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
                 setPadding(dp(15), dp(13), dp(15), dp(13))
                 background = rounded(Color.WHITE, 18f, COLOR_BORDER, 1)
+            }
+            val icon = ImageView(this@MainActivity).apply {
+                setImageResource(android.R.drawable.sym_def_app_icon)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }
+            row.addView(icon, LinearLayout.LayoutParams(dp(42), dp(42)))
+            val content = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), 0, 0, 0)
             }
             val meta = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -972,7 +1444,7 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ))
-            row.addView(meta, matchWidthWrapHeight())
+            content.addView(meta, matchWidthWrapHeight())
 
             val title = TextView(this@MainActivity).apply {
                 textSize = 16f
@@ -981,7 +1453,7 @@ class MainActivity : Activity() {
                 maxLines = 2
                 setPadding(0, dp(7), 0, 0)
             }
-            row.addView(title, matchWidthWrapHeight())
+            content.addView(title, matchWidthWrapHeight())
             val body = TextView(this@MainActivity).apply {
                 textSize = 14f
                 setTextColor(COLOR_TEXT_SECONDARY)
@@ -989,22 +1461,34 @@ class MainActivity : Activity() {
                 setLineSpacing(dp(2).toFloat(), 1f)
                 setPadding(0, dp(5), 0, 0)
             }
-            row.addView(body, matchWidthWrapHeight())
+            content.addView(body, matchWidthWrapHeight())
             val packageName = TextView(this@MainActivity).apply {
                 textSize = 10f
                 setTextColor(COLOR_TEXT_TERTIARY)
                 maxLines = 1
                 setPadding(0, dp(8), 0, 0)
             }
-            row.addView(packageName, matchWidthWrapHeight())
-            row.tag = HistoryRowHolder(source, time, title, body, packageName)
+            content.addView(packageName, matchWidthWrapHeight())
+            row.addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.tag = HistoryRowHolder(icon, source, time, title, body, packageName)
             return row
         }
 
         private fun buildAppGroupRow(): View {
             val row = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
                 setPadding(dp(16), dp(14), dp(16), dp(14))
+                setOnTouchListener(subtlePressAnimator(0.985f))
+            }
+            val icon = ImageView(this@MainActivity).apply {
+                setImageResource(android.R.drawable.sym_def_app_icon)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }
+            row.addView(icon, LinearLayout.LayoutParams(dp(48), dp(48)))
+            val content = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(13), 0, 0, 0)
             }
             val top = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -1028,7 +1512,7 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ))
-            row.addView(top, matchWidthWrapHeight())
+            content.addView(top, matchWidthWrapHeight())
 
             val detail = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -1051,20 +1535,45 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ))
-            row.addView(detail, matchWidthWrapHeight())
+            content.addView(detail, matchWidthWrapHeight())
             val packageName = TextView(this@MainActivity).apply {
                 textSize = 10f
                 setTextColor(COLOR_TEXT_TERTIARY)
                 maxLines = 1
                 setPadding(0, dp(6), 0, 0)
             }
-            row.addView(packageName, matchWidthWrapHeight())
-            row.tag = AppGroupRowHolder(source, count, latest, packageName, disclosure)
+            content.addView(packageName, matchWidthWrapHeight())
+            row.addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.tag = AppGroupRowHolder(icon, source, count, latest, packageName, disclosure)
             return row
+        }
+
+        private fun bindHistoryIcon(imageView: ImageView, packageName: String, sourceLabel: String) {
+            imageView.tag = packageName
+            imageView.contentDescription = "${sourceLabel.ifBlank { packageName }} 图标"
+            imageView.setImageResource(android.R.drawable.sym_def_app_icon)
+            synchronized(historyIconCache) { historyIconCache.get(packageName) }
+                ?.let(imageView::setImageDrawable)
+                ?: loadHistoryIcon(packageName)
+        }
+
+        private fun loadHistoryIcon(packageName: String) {
+            if (!historyIconRequests.add(packageName)) return
+            historyIconLoader.execute {
+                val icon = runCatching { packageManager.getApplicationIcon(packageName) }.getOrNull()
+                if (icon != null) synchronized(historyIconCache) { historyIconCache.put(packageName, icon) }
+                historyIconRequests.remove(packageName)
+                if (icon != null) {
+                    historyIconHandler.post {
+                        if (!isFinishing && !isDestroyed) notifyDataSetChanged()
+                    }
+                }
+            }
         }
     }
 
     private data class HistoryRowHolder(
+        val icon: ImageView,
         val source: TextView,
         val time: TextView,
         val title: TextView,
@@ -1073,11 +1582,19 @@ class MainActivity : Activity() {
     )
 
     private data class AppGroupRowHolder(
+        val icon: ImageView,
         val source: TextView,
         val count: TextView,
         val latest: TextView,
         val packageName: TextView,
         val disclosure: TextView,
+    )
+
+    private data class NavigationTab(
+        val root: LinearLayout,
+        val icon: ImageView,
+        val label: TextView,
+        var selected: Boolean = false,
     )
 
     private sealed interface HistoryListItem {
@@ -1093,7 +1610,7 @@ class MainActivity : Activity() {
     }
 
     private enum class ButtonTone { PRIMARY, SECONDARY, ACCENT, QUIET }
-    private enum class Page { HOME, HISTORY }
+    private enum class Page { HOME, RULES, HISTORY, BACKEND }
     private enum class HistorySortMode(val storageValue: String) {
         TIME("time"),
         APP_COUNT("app_count");

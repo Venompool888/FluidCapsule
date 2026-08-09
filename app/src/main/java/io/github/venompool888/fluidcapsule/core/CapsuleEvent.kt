@@ -23,6 +23,7 @@ data class CapsuleEvent(
     val progress: Int? = null,
     val progressMax: Int = 100,
     val progressIndeterminate: Boolean = false,
+    val priorityAdjustment: Int = 0,
 )
 
 enum class CapsuleKind {

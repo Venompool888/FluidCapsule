@@ -10,8 +10,8 @@ android {
         applicationId = "io.github.venompool888.fluidcapsule"
         minSdk = 26
         targetSdk = 36
-        versionCode = 22
-        versionName = "0.6.1-dev"
+        versionCode = 32
+        versionName = "0.8.0-dev"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
     }

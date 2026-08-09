@@ -31,6 +31,11 @@
             android:exported="false"
             android:label="通知岛白名单" />
 
+        <activity
+            android:name=".settings.AppRuleActivity"
+            android:exported="false"
+            android:label="应用专属规则" />
+
         <service
             android:name=".notification.CapsuleNotificationListenerService"
             android:exported="true"
