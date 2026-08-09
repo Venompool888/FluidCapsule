@@ -3,5 +3,5 @@
     <string name="app_name">流体胶囊</string>
     <string name="notification_listener_label">流体胶囊通知读取</string>
     <string name="accessibility_service_label">流体胶囊后台保活</string>
-    <string name="accessibility_service_description">用于维持胶囊更新，并在你启用 Speedtest 适配后，仅读取 Speedtest 前台可见的测速数值。不会自动点击、输入或保存屏幕正文。</string>
+    <string name="accessibility_service_description">仅用于提高通知监听和胶囊更新的后台存活能力，不读取屏幕内容或执行自动点击。</string>
 </resources>

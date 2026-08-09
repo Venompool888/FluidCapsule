@@ -4,7 +4,7 @@ FluidCapsule needs powerful Android permissions because its core feature is tran
 
 ## Notification access
 
-Notification-listener access allows the app to read notifications, including potentially sensitive message content. FluidCapsule applies the user-selected whitelist to generic notification mirroring; OTP parsing is limited to the device's default SMS application.
+Notification-listener access allows the app to read notifications, including potentially sensitive message content. FluidCapsule applies the user-selected whitelist to generic notification mirroring and supported result formatting such as Speedtest's final notification; OTP parsing is limited to the device's default SMS application.
 
 Processing is local. The manifest does not request internet access, and the project contains no analytics or advertising SDK.
 
@@ -14,9 +14,9 @@ Posting access is used to create the capsule or its standard notification fallba
 
 ## Accessibility
 
-The optional accessibility service supports explicit keep-alive behavior and the opt-in Speedtest adapter. Android restricts this service to `org.zwanoo.android.speedtest`. When both the adapter switch and service are enabled, FluidCapsule reads the visible Speedtest accessibility tree to recognize measurement labels and numeric values.
+The optional accessibility service is intended to support explicit keep-alive behavior on aggressive OEM background-management systems. It does not retrieve window content or automate third-party app interfaces.
 
-The service does not click, type, submit, or navigate. Raw accessibility text is not logged or persisted. Accessibility remains optional; notification-based adapters continue to work when it is disabled.
+Accessibility remains optional. Notification-based adapters, including Speedtest result formatting, continue to work when it is disabled.
 
 ## Clipboard
 

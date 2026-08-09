@@ -7,11 +7,10 @@ FluidCapsule converts source notifications into a small internal event model and
 1. `CapsuleNotificationListenerService` receives posted notifications.
 2. `NotificationNormalizer` extracts stable text, icons, sender information, actions, and the source content intent.
 3. `OtpParser` handles likely verification codes before the generic whitelist route.
-4. `KnownNotificationAdapter` recognizes LocalSend transfer stages and Meituan order stages. Recognized Meituan marketing notifications are suppressed.
-5. The optional, package-scoped Speedtest accessibility adapter extracts only visible measurement labels and numeric values while Speedtest is foregrounded.
-6. The listener or adapter applies user privacy settings and creates a `CapsuleEvent`, optionally including progress.
-7. `PublisherRouter` selects promoted live notifications on supported devices or the standard fallback publisher.
-8. `NotificationFactory` builds the notification, click action, forwarded source actions, and public lock-screen version.
+4. `KnownNotificationAdapter` recognizes LocalSend transfer stages, Meituan order stages, and Speedtest's final `Test Complete` notification. Recognized Meituan marketing notifications are suppressed; Speedtest download and upload results are compacted into one line.
+5. The listener applies user privacy settings and creates a `CapsuleEvent`, optionally including progress.
+6. `PublisherRouter` selects promoted live notifications on supported devices or the standard fallback publisher.
+7. `NotificationFactory` builds the notification, click action, forwarded source actions, and public lock-screen version.
 
 ## Source action forwarding
 
@@ -29,7 +28,7 @@ The custom reply activity exists because some ColorOS surfaces filter actions th
 - Diagnostic storage contains state and timing metadata, not message bodies or OTP values.
 - Reply text is forwarded to the original action and is not persisted by FluidCapsule.
 - OTP copy actions place the code in the Android clipboard only after an explicit tap.
-- Speedtest screen text is parsed in memory. Only current metrics are rendered; the accessibility tree and raw text are not logged or persisted.
+- Speedtest result text comes from its final source notification and is processed in memory like other whitelisted notifications.
 
 ## Compatibility strategy
 

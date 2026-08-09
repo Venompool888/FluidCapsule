@@ -14,6 +14,9 @@ object KnownNotificationAdapter {
         showContent: Boolean,
         now: Long,
     ): KnownNotificationDecision? {
+        if (notification.packageName == SpeedtestTextParser.SPEEDTEST_PACKAGE) {
+            return adaptCompletedSpeedtest(notification, showContent, now)
+        }
         val stage = NotificationStageClassifier.classify(
             notification.packageName,
             notification.combinedText,
@@ -58,6 +61,33 @@ object KnownNotificationAdapter {
                 dedupeKey = notification.notificationKey,
                 progress = stage.progress,
                 progressIndeterminate = stage.indeterminate,
+            ),
+        )
+    }
+
+    private fun adaptCompletedSpeedtest(
+        notification: NormalizedNotification,
+        showContent: Boolean,
+        now: Long,
+    ): KnownNotificationDecision? {
+        val snapshot = SpeedtestTextParser.parse(notification.combinedText.lines()) ?: return null
+        if (snapshot.downloadMbps == null && snapshot.uploadMbps == null) return null
+        return KnownNotificationDecision.Publish(
+            CapsuleEvent(
+                sourcePackage = notification.packageName,
+                sourceLabel = "Speedtest",
+                sourceSmallIcon = notification.smallIcon,
+                sourceLargeIcon = notification.largeIcon,
+                eventId = notification.notificationKey,
+                kind = CapsuleKind.NOTIFICATION,
+                title = notification.title.ifBlank { "Test Complete" },
+                shortText = snapshot.completedNotificationShortText(),
+                body = snapshot.completedNotificationBody(),
+                action = notification.contentIntent?.let(CapsuleAction::OpenOriginal) ?: CapsuleAction.None,
+                privacy = if (showContent) CapsulePrivacy.SHOW_FULL else CapsulePrivacy.HIDE_SENSITIVE,
+                createdAtMillis = now,
+                expiresAtMillis = now + 5 * 60_000L,
+                dedupeKey = notification.notificationKey,
             ),
         )
     }

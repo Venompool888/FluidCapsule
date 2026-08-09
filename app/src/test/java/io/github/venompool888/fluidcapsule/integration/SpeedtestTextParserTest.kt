@@ -14,11 +14,21 @@ class SpeedtestTextParserTest {
         assertEquals(318.45, result.downloadMbps!!, 0.001)
         assertEquals(48.2, result.uploadMbps!!, 0.001)
         assertEquals(100, result.progress)
+        assertEquals("↓ 318.45 Mbps · ↑ 48.2 Mbps · Ping 12 ms", result.completedNotificationBody())
+        assertEquals("↓318.45 ↑48.2", result.completedNotificationShortText())
     }
 
     @Test fun parsesChineseInlineMetrics() {
         val result = SpeedtestTextParser.parse(listOf("延迟 8 ms", "下载 95.6 Mbps"))!!
         assertEquals("↓ 95.6", result.shortText)
         assertEquals(66, result.progress)
+    }
+
+    @Test fun compactsRealCompletedNotificationLayout() {
+        val result = SpeedtestTextParser.parse(
+            "Test Complete\nDownload 406 Mbps\nUpload 32.2 Mbps".lines(),
+        )!!
+        assertEquals("↓ 406 Mbps · ↑ 32.2 Mbps", result.completedNotificationBody())
+        assertEquals("↓406 ↑32.2", result.completedNotificationShortText())
     }
 }

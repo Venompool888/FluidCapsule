@@ -106,18 +106,6 @@ class MainActivity : Activity() {
         }
         content.addView(privacyCard, matchWidthWrapHeight())
 
-        addSectionLabel(content, "专用上云适配", "按需读取受支持应用的实时状态")
-        val integrationCard = card()
-        integrationCard.addSettingRow(
-            title = "Speedtest 测速胶囊",
-            summary = "仅在 Speedtest 前台时读取可见测速数值；不点击、不输入、不保存正文",
-            checked = UserSettings.speedtestCloudEnabled(this),
-        ) { checked ->
-            UserSettings.setSpeedtestCloudEnabled(this, checked)
-            toast(if (checked) "已启用；还需开启无障碍服务" else "已停用 Speedtest 读取")
-        }
-        content.addView(integrationCard, matchWidthWrapHeight())
-
         addSectionLabel(content, "快速设置", "按顺序完成通知权限与来源配置")
         val setupCard = card()
         setupCard.addActionButton("1. 授予通知读取权限", ButtonTone.PRIMARY) {

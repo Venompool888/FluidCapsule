@@ -9,7 +9,6 @@ FluidCapsule uses Android's promoted ongoing notification APIs where available. 
 - Promoted/live notification permission enabled when the system exposes it.
 - Notification listener enabled so source events can be mirrored.
 - Battery settings that allow the listener to remain connected.
-- For Speedtest only: the dedicated adapter switch and package-scoped accessibility service enabled.
 
 ## OEM behavior
 

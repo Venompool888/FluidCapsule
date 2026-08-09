@@ -1,6 +1,8 @@
 package io.github.venompool888.fluidcapsule.integration
 
 object SpeedtestTextParser {
+    const val SPEEDTEST_PACKAGE = "org.zwanoo.android.speedtest"
+
     fun parse(rawTexts: List<String>): SpeedtestSnapshot? {
         val texts = rawTexts.map(String::trim).filter(String::isNotEmpty).distinct()
         if (texts.isEmpty()) return null
@@ -60,6 +62,17 @@ data class SpeedtestSnapshot(
         downloadMbps?.let { add("下载 ${format(it)} Mbps") }
         uploadMbps?.let { add("上传 ${format(it)} Mbps") }
     }.joinToString(" · ")
+
+    fun completedNotificationBody(): String = buildList {
+        downloadMbps?.let { add("↓ ${format(it)} Mbps") }
+        uploadMbps?.let { add("↑ ${format(it)} Mbps") }
+        pingMs?.let { add("Ping ${format(it)} ms") }
+    }.joinToString(" · ")
+
+    fun completedNotificationShortText(): String = buildList {
+        downloadMbps?.let { add("↓${format(it)}") }
+        uploadMbps?.let { add("↑${format(it)}") }
+    }.joinToString(" ").ifEmpty { "完成" }
 
     private fun format(value: Double): String = if (value % 1.0 == 0.0) {
         value.toInt().toString()
