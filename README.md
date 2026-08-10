@@ -24,9 +24,11 @@ Turn Android notifications into interactive capsules on supported ColorOS device
 
 ## Platform support
 
-- Minimum Android version: Android 8.0 / API 26.
-- Best-tested path: Android 16 / API 36 on a ColorOS device with promoted ongoing notifications enabled.
-- Other Android devices can use the standard ongoing-notification fallback, but OEM capsule rendering is not guaranteed.
+- Supported device: OPPO CPH2797 running Android 16 / API 36.
+- Verified firmware baseline: `CPH2797_16.0.9.400(EX01)`.
+- Promoted/live notifications must be enabled. ColorOS still owns the final capsule rendering and may change it in a firmware update.
+
+FluidCapsule 1.0 intentionally sets `minSdk = 36`. Compatibility with older Android versions or other OEM devices is outside the supported scope.
 
 ## Privacy model
 
@@ -41,11 +43,26 @@ Requirements:
 - Android platform-tools for ADB commands
 
 ```bash
-./gradlew testDebugUnitTest assembleDebug
+./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The debug APK is intentionally excluded from Git. Build it locally or install a signed artifact from a future GitHub Release.
+Run the four on-device CPH2797 instrumentation checks with:
+
+```bash
+adb -s SERIAL install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s SERIAL shell am instrument -w \
+  io.github.venompool888.fluidcapsule.test/androidx.test.runner.AndroidJUnitRunner
+./scripts/verify-cph2797.sh --serial SERIAL
+```
+
+The signed release build uses a keystore outside the repository and a password stored in macOS Keychain:
+
+```bash
+./scripts/build-release.sh
+```
+
+The output is `app/build/outputs/apk/release/app-release.apk`. APKs and signing material are intentionally excluded from Git.
 
 ## Initial setup
 
@@ -70,7 +87,7 @@ CapsuleEvent
         ↓
 In-memory priority queue → one visible capsule slot
         ↓
-Promoted live notification or standard fallback
+Android 16 promoted ongoing notification
 ```
 
 More detail is available in [Architecture](docs/ARCHITECTURE.md) and [ColorOS notes](docs/COLOROS.md).
@@ -80,8 +97,16 @@ More detail is available in [Architecture](docs/ARCHITECTURE.md) and [ColorOS no
 - A direct reply is only possible when the source notification supplies a valid `RemoteInput` action. FluidCapsule cannot invent a private sending API for another app.
 - Smart replies are sent immediately when tapped. Manually typed replies still require the Send button.
 - OEM live-notification behavior can change between ColorOS releases.
+- Only CPH2797 on the verified Android 16 firmware baseline is supported by 1.0.
 - Accessibility UI automation for apps without native reply actions is not implemented. The optional accessibility service does not read screen content.
 - The project does not include third-party APKs, decompiled source, proprietary assets, private protocols, or account-bypass features.
+
+## Quality gate
+
+- Local JUnit suite: 37 tests.
+- CPH2797 instrumentation suite: 4 tests, including system notification queue preemption and restoration.
+- Required build gate: unit tests, debug APK, instrumentation APK, and Android lint with no findings.
+- GitHub Actions runs unit tests, the debug build, and lint for every push to `main` and every pull request.
 
 ## Contributing
 

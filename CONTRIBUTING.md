@@ -16,10 +16,11 @@ Thank you for helping improve FluidCapsule.
 3. Run:
 
    ```bash
-   ./gradlew testDebugUnitTest assembleDebug
+   ./gradlew testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug
    ```
 
-4. Describe the user-visible behavior and the devices or Android versions tested.
-5. Document OEM-specific assumptions and safe fallback behavior.
+4. For device-sensitive changes, run the four instrumentation tests and `scripts/verify-cph2797.sh` on CPH2797/API 36.
+5. Describe the user-visible behavior and the exact CPH2797 firmware tested.
+6. Document OEM-specific assumptions and notification fallback behavior.
 
 By contributing, you agree that your contribution is licensed under the MIT License.

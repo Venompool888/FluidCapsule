@@ -133,12 +133,12 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
         return result("status")
             .put("package", context.packageName)
             .put("version", packageInfo.versionName)
-            .put("versionCode", if (Build.VERSION.SDK_INT >= 28) packageInfo.longVersionCode else packageInfo.versionCode)
+            .put("versionCode", packageInfo.longVersionCode)
             .put("notificationPostingEnabled", notificationManager.areNotificationsEnabled())
             .put("notificationListenerEnabled", listenerEnabled)
             .put(
                 "sensitiveNotificationsAllowed",
-                appOpsManager.unsafeCheckOpNoThrow(
+                appOpsManager.checkOpNoThrow(
                     OPSTR_RECEIVE_SENSITIVE_NOTIFICATIONS,
                     Process.myUid(),
                     context.packageName,
