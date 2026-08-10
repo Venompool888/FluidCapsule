@@ -104,9 +104,9 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         if (shouldRecordHistory) {
             historyExecutor.execute {
                 NotificationHistoryStore.record(applicationContext, normalized)
-                NotificationHistoryStore.purgeOlderThanDays(
+                NotificationHistoryStore.purgeExpired(
                     applicationContext,
-                    UserSettings.notificationHistoryRetentionDays(applicationContext),
+                    UserSettings.notificationHistoryRetentionPolicy(applicationContext),
                 )
             }
         }

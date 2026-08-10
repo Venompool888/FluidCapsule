@@ -16,7 +16,10 @@ Version 1.0 is supported on OPPO CPH2797 running API 36. Always pass the exact s
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set display-duration 8
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set history-enabled true
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set history-sort app_count
-./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set history-retention 7
+./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set history-retention 30 days
+./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set history-retention 6 months
+./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set history-retention 2 years
+./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL set history-retention forever
 ```
 
 Every app-specific rule shown in the UI is also available through the CLI:
@@ -40,7 +43,7 @@ History lifecycle operations:
 
 ```bash
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL history count
-./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL history purge 7
+./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL history purge 30 days
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL history delete-package com.google.android.gm
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL history clear
 ```
