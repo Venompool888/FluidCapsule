@@ -513,19 +513,18 @@ class MainActivity : Activity() {
     }
 
     private fun buildHistoryPage(): View {
-        val page = LinearLayout(this).apply {
+        val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), 0, dp(20), dp(4))
             setBackgroundColor(COLOR_PAGE)
         }
-        page.addView(TextView(this).apply {
+        header.addView(TextView(this).apply {
             text = "通知历史记录"
             textSize = 26f
             setTextColor(COLOR_TEXT_PRIMARY)
             setTypeface(typeface, Typeface.BOLD)
             includeFontPadding = false
         }, matchWidthWrapHeight())
-        page.addView(TextView(this).apply {
+        header.addView(TextView(this).apply {
             text = "Notification History"
             textSize = 13f
             setTextColor(COLOR_PRIMARY)
@@ -544,7 +543,7 @@ class MainActivity : Activity() {
             toast(if (checked) "已开始记录新通知" else "已停止记录，原有历史已保留")
             refreshHistory()
         }
-        page.addView(recordingCard, matchWidthWrapHeight())
+        header.addView(recordingCard, matchWidthWrapHeight())
 
         val privacyCard = card()
         privacyCard.addHistoryRetentionSetting()
@@ -561,7 +560,7 @@ class MainActivity : Activity() {
                 }
                 .show()
         }
-        page.addView(privacyCard, matchWidthWrapHeight().apply { topMargin = dp(10) })
+        header.addView(privacyCard, matchWidthWrapHeight().apply { topMargin = dp(10) })
 
         historySortMode = HistorySortMode.fromStorageValue(
             UserSettings.notificationHistorySortMode(this),
@@ -594,7 +593,7 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(0, dp(44), 1.35f).apply { marginStart = dp(7) },
         )
         sortCard.addView(sortRow, matchWidthWrapHeight())
-        page.addView(sortCard, matchWidthWrapHeight().apply { topMargin = dp(10) })
+        header.addView(sortCard, matchWidthWrapHeight().apply { topMargin = dp(10) })
         updateHistorySortSelection()
 
         historyCountView = TextView(this).apply {
@@ -602,7 +601,17 @@ class MainActivity : Activity() {
             setTextColor(COLOR_TEXT_SECONDARY)
             setPadding(dp(4), dp(16), dp(4), dp(9))
         }
-        page.addView(historyCountView, matchWidthWrapHeight())
+        header.addView(historyCountView, matchWidthWrapHeight())
+
+        historyEmptyView = TextView(this).apply {
+            text = "还没有通知历史\n打开上方开关后，新通知会保存在这里"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(COLOR_TEXT_TERTIARY)
+            setLineSpacing(dp(4).toFloat(), 1f)
+            setPadding(dp(20), dp(36), dp(20), dp(36))
+        }
+        header.addView(historyEmptyView, matchWidthWrapHeight())
 
         historyAdapter = NotificationHistoryAdapter { sourcePackage ->
             expandedHistoryPackage = if (expandedHistoryPackage == sourcePackage) {
@@ -612,40 +621,18 @@ class MainActivity : Activity() {
             }
             refreshHistory(animate = true)
         }
-        val listFrame = FrameLayout(this)
         historyListView = ListView(this).apply {
-            adapter = historyAdapter
             divider = null
             dividerHeight = dp(10)
             clipToPadding = false
-            setPadding(0, 0, 0, dp(8))
-            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(dp(20), 0, dp(20), dp(12))
+            setBackgroundColor(COLOR_PAGE)
             isVerticalScrollBarEnabled = false
+            addHeaderView(header, null, false)
+            adapter = historyAdapter
         }
-        listFrame.addView(historyListView, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT,
-        ))
-        historyEmptyView = TextView(this).apply {
-            text = "还没有通知历史\n打开上方开关后，新通知会保存在这里"
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setLineSpacing(dp(4).toFloat(), 1f)
-            setPadding(dp(20), dp(36), dp(20), dp(36))
-        }
-        listFrame.addView(historyEmptyView, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER,
-        ))
-        page.addView(listFrame, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            0,
-            1f,
-        ))
         refreshHistory()
-        return page
+        return historyListView
     }
 
     @SuppressLint("ClickableViewAccessibility")
