@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.content.Intent
 import android.os.Build
+import android.widget.ListView
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
@@ -28,11 +30,11 @@ class TargetDeviceSmokeTest {
     }
 
     @Test
-    fun testInstalledBuildIsVersionOne() {
+    fun testInstalledBuildIsExpectedVersion() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-        assertEquals("1.0.0", packageInfo.versionName)
-        assertEquals(33L, packageInfo.longVersionCode)
+        assertEquals("1.0.1", packageInfo.versionName)
+        assertEquals(34L, packageInfo.longVersionCode)
     }
 
     @Test
@@ -43,6 +45,18 @@ class TargetDeviceSmokeTest {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
         instrumentation.waitForIdleSync()
+    }
+
+    @Test
+    fun testHistoryUsesOneContinuousScrollContainer() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val field = MainActivity::class.java.getDeclaredField("historyListView")
+                field.isAccessible = true
+                val historyList = field.get(activity) as ListView
+                assertEquals(1, historyList.headerViewsCount)
+            }
+        }
     }
 
     @Test
