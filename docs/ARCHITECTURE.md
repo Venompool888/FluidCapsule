@@ -11,7 +11,7 @@ FluidCapsule converts source notifications into a small internal event model and
 4. `KnownNotificationAdapter` recognizes LocalSend transfer stages, Meituan order stages, and Speedtest's final `Test Complete` notification. Recognized Meituan marketing notifications are suppressed; Speedtest download and upload results are compacted into one line.
 5. The listener applies user privacy settings and creates a `CapsuleEvent`, optionally including progress.
 6. `CapsuleCoordinator` inserts the event into an in-memory queue and selects one visible winner. OTP events outrank ongoing custom states, which outrank ordinary notifications; events of the same priority use newest-first display.
-7. `PublisherRouter` selects promoted live notifications on supported devices or the standard fallback publisher.
+7. `PublisherRouter` publishes an Android 16 promoted ongoing notification for the supported CPH2797 target.
 8. `NotificationFactory` builds the notification, click action, forwarded source actions, and public lock-screen version.
 
 ## Queue and restoration
@@ -43,7 +43,7 @@ The custom reply activity exists because some ColorOS surfaces filter actions th
 
 ## Compatibility strategy
 
-The project uses public Android notification APIs. OEM promotion and rendering decisions remain outside the app's control, so every promoted notification path has a standard-notification fallback.
+The project uses public Android 16 notification APIs. OEM promotion and rendering decisions remain outside the app's control; the underlying notification remains visible when ColorOS declines capsule promotion.
 
 ## Optional server persistence
 

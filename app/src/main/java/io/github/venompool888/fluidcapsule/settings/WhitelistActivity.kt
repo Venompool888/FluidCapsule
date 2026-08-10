@@ -1,6 +1,7 @@
 package io.github.venompool888.fluidcapsule.settings
 
 import android.app.Activity
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.pm.ApplicationInfo
@@ -215,6 +216,7 @@ class WhitelistActivity : Activity() {
         if (::adapter.isInitialized) adapter.refresh()
     }
 
+    @Suppress("DEPRECATION")
     private fun configureSystemBars() {
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
@@ -602,6 +604,7 @@ class WhitelistActivity : Activity() {
             .start()
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun pressAnimator(scale: Float = 0.98f) = View.OnTouchListener { view, event ->
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> view.animate().scaleX(scale).scaleY(scale).alpha(0.86f).setDuration(70).start()

@@ -1,6 +1,7 @@
 package io.github.venompool888.fluidcapsule
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.NotificationManager
@@ -381,6 +382,7 @@ class MainActivity : Activity() {
         updateNavigationSelection()
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun buildNavigationTab(
         label: String,
         iconRes: Int,
@@ -646,6 +648,7 @@ class MainActivity : Activity() {
         return page
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun buildHistorySortTab(label: String, action: () -> Unit): TextView =
         TextView(this).apply {
             text = label
@@ -1036,6 +1039,7 @@ class MainActivity : Activity() {
         }, matchWidthWrapHeight())
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun LinearLayout.addActionButton(
         label: String,
         tone: ButtonTone = ButtonTone.SECONDARY,
@@ -1216,6 +1220,7 @@ class MainActivity : Activity() {
     private fun statusLine(label: String, enabled: Boolean): String =
         "${if (enabled) "✓" else "○"}  ${label.padEnd(8, '　')} ${if (enabled) "已开启" else "未开启"}"
 
+    @Suppress("DEPRECATION")
     private fun configureSystemBars() {
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
@@ -1284,6 +1289,7 @@ class MainActivity : Activity() {
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun subtlePressAnimator(scale: Float = 0.975f) = View.OnTouchListener { view, event ->
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> view.animate()
