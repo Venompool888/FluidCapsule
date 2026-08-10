@@ -12,6 +12,8 @@ object UserSettings {
     private const val KEY_NOTIFICATION_HISTORY_SORT_MODE = "notification_history_sort_mode"
     private const val KEY_CAPSULE_DISPLAY_DURATION_MINUTES = "capsule_display_duration_minutes"
     private const val KEY_NOTIFICATION_HISTORY_RETENTION_DAYS = "notification_history_retention_days"
+    private const val KEY_NOTIFICATION_HISTORY_RETENTION_VALUE = "notification_history_retention_value"
+    private const val KEY_NOTIFICATION_HISTORY_RETENTION_UNIT = "notification_history_retention_unit"
 
     fun showOtpDirectly(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -102,13 +104,29 @@ object UserSettings {
             .apply()
     }
 
-    fun notificationHistoryRetentionDays(context: Context): Int =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_NOTIFICATION_HISTORY_RETENTION_DAYS, 7)
-            .coerceIn(1, 30)
+    fun notificationHistoryRetentionPolicy(context: Context): HistoryRetentionPolicy {
+        val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return HistoryRetentionPolicy.fromStored(
+            value = preferences.getInt(
+                KEY_NOTIFICATION_HISTORY_RETENTION_VALUE,
+                HistoryRetentionPolicy.DEFAULT.value,
+            ),
+            unitValue = preferences.getString(KEY_NOTIFICATION_HISTORY_RETENTION_UNIT, null),
+            legacyDays = preferences.getInt(
+                KEY_NOTIFICATION_HISTORY_RETENTION_DAYS,
+                HistoryRetentionPolicy.DEFAULT.value,
+            ),
+        )
+    }
 
-    fun setNotificationHistoryRetentionDays(context: Context, days: Int) {
+    fun setNotificationHistoryRetentionPolicy(
+        context: Context,
+        policy: HistoryRetentionPolicy,
+    ) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putInt(KEY_NOTIFICATION_HISTORY_RETENTION_DAYS, days.coerceIn(1, 30)).apply()
+            .edit()
+            .putInt(KEY_NOTIFICATION_HISTORY_RETENTION_VALUE, policy.value)
+            .putString(KEY_NOTIFICATION_HISTORY_RETENTION_UNIT, policy.unit.storageValue)
+            .apply()
     }
 }

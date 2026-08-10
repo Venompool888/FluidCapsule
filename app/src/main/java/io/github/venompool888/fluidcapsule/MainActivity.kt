@@ -37,6 +37,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.NumberPicker
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
@@ -54,6 +55,8 @@ import io.github.venompool888.fluidcapsule.keepalive.KeepAliveService
 import io.github.venompool888.fluidcapsule.notification.CapsuleNotificationListenerService
 import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
 import io.github.venompool888.fluidcapsule.settings.CapsuleDisplayDuration
+import io.github.venompool888.fluidcapsule.settings.HistoryRetentionPolicy
+import io.github.venompool888.fluidcapsule.settings.HistoryRetentionUnit
 import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
 import io.github.venompool888.fluidcapsule.settings.UserSettings
 import io.github.venompool888.fluidcapsule.settings.WhitelistActivity
@@ -983,7 +986,7 @@ class MainActivity : Activity() {
     }
 
     private fun LinearLayout.addHistoryRetentionSetting() {
-        val currentDays = UserSettings.notificationHistoryRetentionDays(this@MainActivity)
+        val currentPolicy = UserSettings.notificationHistoryRetentionPolicy(this@MainActivity)
         addView(TextView(this@MainActivity).apply {
             text = "自动保留时间"
             textSize = 16f
@@ -992,38 +995,95 @@ class MainActivity : Activity() {
             setPadding(dp(5), dp(7), dp(5), 0)
         }, matchWidthWrapHeight())
         val valueView = TextView(this@MainActivity).apply {
-            text = "$currentDays 天"
-            textSize = 20f
+            text = currentPolicy.bilingualLabel()
+            textSize = 18f
             gravity = Gravity.CENTER
             setTextColor(COLOR_PRIMARY_DARK)
             setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(7), 0, 0)
+            setPadding(dp(12), dp(13), dp(12), dp(13))
+            background = RippleDrawable(
+                ColorStateList.valueOf(COLOR_RIPPLE),
+                rounded(COLOR_ACCENT_SOFT, 14f),
+                null,
+            )
+            contentDescription = "选择通知历史自动保留时间"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showHistoryRetentionDialog(this) }
         }
-        addView(valueView, matchWidthWrapHeight())
-        var selectedDays = currentDays
-        addView(SeekBar(this@MainActivity).apply {
-            max = 29
-            progress = currentDays - 1
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    selectedDays = progress + 1
-                    valueView.text = "$selectedDays 天"
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                    UserSettings.setNotificationHistoryRetentionDays(this@MainActivity, selectedDays)
-                    val deleted = NotificationHistoryStore.purgeOlderThanDays(this@MainActivity, selectedDays)
-                    refreshHistory(animate = deleted > 0)
-                    toast("历史将保留 $selectedDays 天")
-                }
-            })
-        }, matchWidthWrapHeight())
+        addView(valueView, matchWidthWrapHeight().apply {
+            topMargin = dp(10)
+            bottomMargin = dp(8)
+        })
         addView(TextView(this@MainActivity).apply {
-            text = "长按单条记录或应用分组也可以单独删除"
+            text = "点击选择天、月、年或永久保存；长按记录仍可单独删除"
             textSize = 12f
             setTextColor(COLOR_TEXT_TERTIARY)
             setPadding(dp(5), 0, dp(5), dp(7))
         }, matchWidthWrapHeight())
+    }
+
+    private fun showHistoryRetentionDialog(valueView: TextView) {
+        val currentPolicy = UserSettings.notificationHistoryRetentionPolicy(this)
+        val units = HistoryRetentionUnit.entries
+        val numberPicker = NumberPicker(this).apply {
+            minValue = HistoryRetentionPolicy.MIN_VALUE
+            maxValue = HistoryRetentionPolicy.MAX_VALUE
+            value = currentPolicy.value.takeIf { it > 0 } ?: 1
+            wrapSelectorWheel = false
+        }
+        val unitPicker = NumberPicker(this).apply {
+            minValue = 0
+            maxValue = units.lastIndex
+            displayedValues = units.map { it.pickerLabel }.toTypedArray()
+            value = units.indexOf(currentPolicy.unit)
+            wrapSelectorWheel = false
+        }
+        fun updateNumberState(unitIndex: Int) {
+            val forever = units[unitIndex] == HistoryRetentionUnit.FOREVER
+            numberPicker.isEnabled = !forever
+            numberPicker.alpha = if (forever) 0.35f else 1f
+        }
+        updateNumberState(unitPicker.value)
+        unitPicker.setOnValueChangedListener { _, _, newValue -> updateNumberState(newValue) }
+
+        val pickerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            addView(numberPicker, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(unitPicker, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.45f))
+        }
+        val dialogContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), 0, dp(18), 0)
+            addView(TextView(this@MainActivity).apply {
+                text = "按自然日、自然月或自然年自动清理；选择永久后不会自动删除。"
+                textSize = 13f
+                setTextColor(COLOR_TEXT_SECONDARY)
+                setPadding(0, 0, 0, dp(8))
+            }, matchWidthWrapHeight())
+            addView(pickerRow, matchWidthWrapHeight())
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("通知历史保留时间")
+            .setView(dialogContent)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("保存") { _, _ ->
+                val unit = units[unitPicker.value]
+                val policy = if (unit == HistoryRetentionUnit.FOREVER) {
+                    HistoryRetentionPolicy(0, unit)
+                } else {
+                    HistoryRetentionPolicy(numberPicker.value, unit)
+                }
+                UserSettings.setNotificationHistoryRetentionPolicy(this, policy)
+                val deleted = NotificationHistoryStore.purgeExpired(this, policy)
+                valueView.text = policy.bilingualLabel()
+                valueView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                refreshHistory(animate = deleted > 0)
+                toast("历史将${if (policy.unit == HistoryRetentionUnit.FOREVER) "永久保存" else "保留 ${policy.chineseLabel()}"}")
+            }
+            .show()
     }
 
     @SuppressLint("ClickableViewAccessibility")

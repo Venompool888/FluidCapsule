@@ -51,13 +51,14 @@ Usage:
   fluid-capsule-cli.sh [--serial SERIAL] set display-duration 1..30
   fluid-capsule-cli.sh [--serial SERIAL] set history-enabled true|false
   fluid-capsule-cli.sh [--serial SERIAL] set history-sort time|app_count
-  fluid-capsule-cli.sh [--serial SERIAL] set history-retention 1..30
+  fluid-capsule-cli.sh [--serial SERIAL] set history-retention 1..999 [days|months|years]
+  fluid-capsule-cli.sh [--serial SERIAL] set history-retention forever
   fluid-capsule-cli.sh [--serial SERIAL] app-rule PACKAGE get
   fluid-capsule-cli.sh [--serial SERIAL] app-rule PACKAGE set KEY VALUE
   fluid-capsule-cli.sh [--serial SERIAL] app-rule PACKAGE reset
   fluid-capsule-cli.sh [--serial SERIAL] history count|clear
   fluid-capsule-cli.sh [--serial SERIAL] history delete-package PACKAGE
-  fluid-capsule-cli.sh [--serial SERIAL] history purge 1..30
+  fluid-capsule-cli.sh [--serial SERIAL] history purge 1..999 [days|months|years]
   fluid-capsule-cli.sh [--serial SERIAL] system notification-listener true|false
   fluid-capsule-cli.sh [--serial SERIAL] system post-notifications true|false
   fluid-capsule-cli.sh [--serial SERIAL] system accessibility true|false
@@ -130,7 +131,11 @@ case "${1:-}" in
       history-retention) command="set-history-retention" ;;
       *) usage; exit 2 ;;
     esac
-    broadcast --es command "$command" --es value "$value"
+    if [[ "$setting" == "history-retention" && "$value" != "forever" ]]; then
+      broadcast --es command "$command" --es value "$value" --es unit "${4:-days}"
+    else
+      broadcast --es command "$command" --es value "$value"
+    fi
     ;;
   app-rule)
     package_name="${2:?package required}"
@@ -146,7 +151,7 @@ case "${1:-}" in
       count) broadcast --es command history-count ;;
       clear) broadcast --es command history-clear ;;
       delete-package) broadcast --es command history-delete-package --es package "${3:?package required}" ;;
-      purge) broadcast --es command history-purge --es value "${3:?days required}" ;;
+      purge) broadcast --es command history-purge --es value "${3:?retention value required}" --es unit "${4:-days}" ;;
       *) usage; exit 2 ;;
     esac
     ;;

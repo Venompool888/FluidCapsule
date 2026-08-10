@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import io.github.venompool888.fluidcapsule.notification.NormalizedNotification
+import io.github.venompool888.fluidcapsule.settings.HistoryRetentionPolicy
 import java.util.UUID
 
 object NotificationHistoryStore {
@@ -100,8 +101,8 @@ object NotificationHistoryStore {
     fun clear(context: Context): Int =
         database(context.applicationContext).writableDatabase.delete(TABLE_HISTORY, null, null)
 
-    fun purgeOlderThanDays(context: Context, days: Int): Int {
-        val cutoff = System.currentTimeMillis() - days.coerceIn(1, 30) * 86_400_000L
+    fun purgeExpired(context: Context, policy: HistoryRetentionPolicy): Int {
+        val cutoff = policy.cutoffMillis() ?: return 0
         return database(context.applicationContext).writableDatabase.delete(
             TABLE_HISTORY,
             "captured_at < ?",

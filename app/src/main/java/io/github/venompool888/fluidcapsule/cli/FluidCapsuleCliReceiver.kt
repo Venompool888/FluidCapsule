@@ -17,6 +17,8 @@ import io.github.venompool888.fluidcapsule.notification.CapsuleNotificationListe
 import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
 import io.github.venompool888.fluidcapsule.settings.AppRule
 import io.github.venompool888.fluidcapsule.settings.AppRuleStore
+import io.github.venompool888.fluidcapsule.settings.HistoryRetentionPolicy
+import io.github.venompool888.fluidcapsule.settings.HistoryRetentionUnit
 import io.github.venompool888.fluidcapsule.settings.UserSettings
 import io.github.venompool888.fluidcapsule.history.NotificationHistoryStore
 import org.json.JSONArray
@@ -79,9 +81,11 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
             UserSettings.setNotificationHistorySortMode(context, value)
             result(command).put("value", value)
         }
-        "set-history-retention" -> setInteger(context, command, intent, 1, 30) {
-            UserSettings.setNotificationHistoryRetentionDays(context, it)
-            NotificationHistoryStore.purgeOlderThanDays(context, it)
+        "set-history-retention" -> {
+            val policy = requiredRetentionPolicy(intent)
+            UserSettings.setNotificationHistoryRetentionPolicy(context, policy)
+            retentionResult(command, policy)
+                .put("deleted", NotificationHistoryStore.purgeExpired(context, policy))
         }
         "app-rule-get" -> result(command).put("rule", ruleJson(context, requiredPackage(intent)))
         "app-rule-set" -> updateAppRule(context, intent)
@@ -98,8 +102,9 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
             NotificationHistoryStore.deletePackage(context, requiredPackage(intent)),
         )
         "history-purge" -> {
-            val days = requiredInteger(intent, 1, 30)
-            result(command).put("days", days).put("deleted", NotificationHistoryStore.purgeOlderThanDays(context, days))
+            val policy = requiredRetentionPolicy(intent)
+            retentionResult(command, policy)
+                .put("deleted", NotificationHistoryStore.purgeExpired(context, policy))
         }
         else -> throw IllegalArgumentException(
             "unknown command; see docs/CLI.md",
@@ -130,6 +135,7 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
             context.packageManager.getPackageInfo(context.packageName, 0)
         }
 
+        val retention = UserSettings.notificationHistoryRetentionPolicy(context)
         return result("status")
             .put("package", context.packageName)
             .put("version", packageInfo.versionName)
@@ -156,7 +162,11 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
             .put("displayDurationMinutes", UserSettings.capsuleDisplayDurationMinutes(context))
             .put("historyEnabled", UserSettings.notificationHistoryEnabled(context))
             .put("historySort", UserSettings.notificationHistorySortMode(context))
-            .put("historyRetentionDays", UserSettings.notificationHistoryRetentionDays(context))
+            .put(
+                "historyRetentionDays",
+                if (retention.unit == HistoryRetentionUnit.DAYS) retention.value else JSONObject.NULL,
+            )
+            .put("historyRetention", retentionJson(retention))
             .put("historyCount", NotificationHistoryStore.count(context))
             .put("whitelist", JSONArray(NotificationWhitelist.packages(context).sorted()))
             .put("otpOnlyPackages", JSONArray(NotificationWhitelist.otpOnlyPackages(context).sorted()))
@@ -291,6 +301,33 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
         requiredValue(intent).toIntOrNull()?.takeIf { it in min..max }
             ?: throw IllegalArgumentException("value must be an integer in $min..$max")
 
+    private fun requiredRetentionPolicy(intent: Intent): HistoryRetentionPolicy {
+        val rawValue = requiredValue(intent).trim().lowercase()
+        if (rawValue in setOf("forever", "permanent", "永久")) {
+            return HistoryRetentionPolicy(0, HistoryRetentionUnit.FOREVER)
+        }
+        val value = rawValue.toIntOrNull()
+            ?.takeIf { it in HistoryRetentionPolicy.MIN_VALUE..HistoryRetentionPolicy.MAX_VALUE }
+            ?: throw IllegalArgumentException("retention value must be 1..999 or forever")
+        val unit = when (intent.getStringExtra(EXTRA_UNIT)?.trim()?.lowercase() ?: "days") {
+            "day", "days", "天" -> HistoryRetentionUnit.DAYS
+            "month", "months", "月" -> HistoryRetentionUnit.MONTHS
+            "year", "years", "年" -> HistoryRetentionUnit.YEARS
+            else -> throw IllegalArgumentException("unit must be days|months|years")
+        }
+        return HistoryRetentionPolicy(value, unit)
+    }
+
+    private fun retentionResult(command: String, policy: HistoryRetentionPolicy): JSONObject =
+        result(command)
+            .put("retention", retentionJson(policy))
+
+    private fun retentionJson(policy: HistoryRetentionPolicy): JSONObject =
+        JSONObject()
+            .put("value", policy.value)
+            .put("unit", policy.unit.storageValue)
+            .put("label", policy.bilingualLabel())
+
     private fun parseBoolean(value: String): Boolean = when (value.trim().lowercase()) {
         "true", "1", "on", "yes" -> true
         "false", "0", "off", "no" -> false
@@ -308,6 +345,7 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
         private const val EXTRA_COMMAND = "command"
         private const val EXTRA_PACKAGE = "package"
         private const val EXTRA_VALUE = "value"
+        private const val EXTRA_UNIT = "unit"
         private const val EXTRA_KEY = "key"
         private const val OPSTR_RECEIVE_SENSITIVE_NOTIFICATIONS =
             "android:receive_sensitive_notifications"
