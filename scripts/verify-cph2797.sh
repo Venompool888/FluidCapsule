@@ -5,7 +5,7 @@ ADB_BIN="${ADB_BIN:-$(command -v adb || true)}"
 APP_PACKAGE="io.github.venompool888.fluidcapsule"
 EXPECTED_MODEL="CPH2797"
 EXPECTED_SDK="36"
-EXPECTED_VERSION="1.0.1"
+EXPECTED_VERSION="1.1.0"
 serial="${ANDROID_SERIAL:-}"
 
 if [[ "${1:-}" == "--serial" ]]; then

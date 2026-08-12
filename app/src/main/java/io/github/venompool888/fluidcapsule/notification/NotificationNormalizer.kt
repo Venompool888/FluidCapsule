@@ -57,6 +57,7 @@ object NotificationNormalizer {
             notificationKey = sbn.key,
             title = title,
             primaryText = primaryText,
+            messageTexts = messages,
             combinedText = parts.joinToString("\n"),
             postedAtMillis = sbn.postTime,
             contentIntent = notification.contentIntent,

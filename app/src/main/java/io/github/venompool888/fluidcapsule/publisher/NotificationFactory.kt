@@ -10,6 +10,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import io.github.venompool888.fluidcapsule.R
 import io.github.venompool888.fluidcapsule.action.CopyOtpReceiver
+import io.github.venompool888.fluidcapsule.action.DismissCapsuleReceiver
 import io.github.venompool888.fluidcapsule.action.ForwardNotificationActionReceiver
 import io.github.venompool888.fluidcapsule.action.OpenOriginalActivity
 import io.github.venompool888.fluidcapsule.action.ReplyActivity
@@ -17,6 +18,7 @@ import io.github.venompool888.fluidcapsule.core.CapsuleAction
 import io.github.venompool888.fluidcapsule.core.CapsuleEvent
 import io.github.venompool888.fluidcapsule.core.CapsuleKind
 import io.github.venompool888.fluidcapsule.core.CapsulePrivacy
+import io.github.venompool888.fluidcapsule.notification.TencentMessageAccumulator
 
 internal object NotificationFactory {
     const val CAPSULE_CHANNEL_ID = "capsule_events"
@@ -116,9 +118,7 @@ internal object NotificationFactory {
                 event.progressIndeterminate,
             )
         }
-        if (event.kind == CapsuleKind.NOTIFICATION) {
-            addForwardedActions(context, builder, event)
-        }
+        addVisibleActions(context, builder, event, clickIntent)
 
         if (!showFull) {
             val publicTitle = if (event.kind == io.github.venompool888.fluidcapsule.core.CapsuleKind.OTP) {
@@ -141,25 +141,67 @@ internal object NotificationFactory {
         return builder
     }
 
-    private fun addForwardedActions(
+    private fun addVisibleActions(
         context: Context,
         builder: Notification.Builder,
         event: CapsuleEvent,
+        openOriginalIntent: PendingIntent?,
     ) {
         var count = 0
-        event.sourceActions.forEach { sourceAction ->
-            if (count >= MAX_VISIBLE_ACTIONS) return@forEach
-            val isReply = sourceAction.semanticAction == Notification.Action.SEMANTIC_ACTION_REPLY ||
-                !sourceAction.remoteInputs.isNullOrEmpty()
-            builder.addAction(
-                if (isReply) {
-                    replyActivityAction(context, event, sourceAction)
-                } else {
-                    forwardedAction(context, event, sourceAction)
-                },
-            )
-            count++
+        var hasReply = false
+        if (event.kind == CapsuleKind.NOTIFICATION) {
+            event.sourceActions.forEach { sourceAction ->
+                if (count >= MAX_VISIBLE_ACTIONS) return@forEach
+                val isReply =
+                    sourceAction.semanticAction == Notification.Action.SEMANTIC_ACTION_REPLY ||
+                        !sourceAction.remoteInputs.isNullOrEmpty()
+                hasReply = hasReply || isReply
+                builder.addAction(
+                    if (isReply) {
+                        replyActivityAction(context, event, sourceAction)
+                    } else {
+                        forwardedAction(context, event, sourceAction)
+                    },
+                )
+                count++
+            }
+            if (!hasReply &&
+                count < MAX_VISIBLE_ACTIONS &&
+                event.sourcePackage in OPEN_REPLY_PACKAGES &&
+                openOriginalIntent != null
+            ) {
+                builder.addAction(
+                    Notification.Action.Builder(
+                        Icon.createWithResource(context, R.drawable.ic_capsule),
+                        "打开回复",
+                        openOriginalIntent,
+                    ).build(),
+                )
+                count++
+            }
         }
+        if (event.sourceActions.isEmpty() && count < MAX_VISIBLE_ACTIONS) {
+            builder.addAction(dismissAction(context, event))
+        }
+    }
+
+    private fun dismissAction(context: Context, event: CapsuleEvent): Notification.Action {
+        val dismissIntent = Intent(context, DismissCapsuleReceiver::class.java)
+            .setAction(DismissCapsuleReceiver.ACTION_DISMISS_CAPSULE)
+            .putExtra(DismissCapsuleReceiver.EXTRA_EVENT_ID, event.eventId)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            "${event.eventId}:dismiss".hashCode(),
+            dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return Notification.Action.Builder(
+            Icon.createWithResource(context, R.drawable.ic_notification_delete),
+            "关闭",
+            pendingIntent,
+        )
+            .setSemanticAction(Notification.Action.SEMANTIC_ACTION_DELETE)
+            .build()
     }
 
     private fun forwardedAction(
@@ -232,4 +274,8 @@ internal object NotificationFactory {
     }
 
     private const val MAX_VISIBLE_ACTIONS = 2
+    private val OPEN_REPLY_PACKAGES = setOf(
+        TencentMessageAccumulator.WECHAT_PACKAGE,
+        TencentMessageAccumulator.QQ_PACKAGE,
+    )
 }

@@ -12,13 +12,15 @@ FluidCapsule converts source notifications into a small internal event model and
 5. The listener applies user privacy settings and creates a `CapsuleEvent`, optionally including progress.
 6. `CapsuleCoordinator` inserts the event into an in-memory queue and selects one visible winner. OTP events outrank ongoing custom states, which outrank ordinary notifications; events of the same priority use newest-first display.
 7. `PublisherRouter` publishes an Android 16 promoted ongoing notification for the supported CPH2797 target.
-8. `NotificationFactory` builds the notification, click action, forwarded source actions, and public lock-screen version.
+8. `NotificationFactory` builds the notification, click action, forwarded source actions, actionless-event close fallback, and public lock-screen version.
 
 ## Queue and restoration
 
 ColorOS still receives one stable capsule notification ID. Up to eight source events are retained only in process memory, so a newer WeChat message can replace the visible Telegram capsule without destroying Telegram's original click and reply context.
 
-Opening the source, copying an OTP, replying, forwarding a source action, source-notification removal, or the visible 60-second timeout consumes that event and immediately republishes the next valid winner. Ordinary mirrored messages remain eligible for restoration for up to five minutes. Updating the same source notification key replaces its existing queue entry instead of creating a duplicate. On listener reconnection, recent still-active source notifications are normalized again to rebuild the queue.
+Opening the source, copying an OTP, replying, forwarding a source action, source-notification removal, or the selected visible timeout consumes that event and immediately republishes the next valid winner. Ordinary mirrored messages remain eligible for restoration for the configured display duration. Updating the same source notification key replaces its existing queue entry instead of creating a duplicate. On listener reconnection, recent still-active source notifications are normalized again to rebuild the queue.
+
+If a source notification exposes no action, FluidCapsule adds a local `关闭` action with a distinct trash icon even when it also adds an app-specific action such as `打开回复`. It asks the connected notification-listener service to dismiss the source notification by its Android notification key, consumes the current capsule event, and restores the next queued event. If the source is already gone or Android rejects cancellation, the capsule still closes normally.
 
 ## Source action forwarding
 
