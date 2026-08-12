@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.FluidCapsule" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.FluidCapsule" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:colorAccent">#0A9188</item>
-        <item name="android:windowBackground">#F5F8FC</item>
+        <item name="android:colorAccent">#5DDCD0</item>
+        <item name="android:windowBackground">#0B1117</item>
         <item name="android:windowDisablePreview">true</item>
     </style>
 
-    <style name="Theme.FluidCapsule.ReplySheet" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.FluidCapsule.ReplySheet" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:colorAccent">#007A70</item>
+        <item name="android:colorAccent">#5DDCD0</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowNoTitle">true</item>

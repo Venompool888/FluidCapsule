@@ -5,6 +5,7 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Intent
+import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -33,12 +34,17 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import io.github.venompool888.fluidcapsule.publisher.CapsuleCoordinator
+import io.github.venompool888.fluidcapsule.ui.withFluidThemeMode
 
 class ReplyActivity : Activity() {
     private lateinit var replyInput: EditText
     private lateinit var sendButton: Button
     private lateinit var inputBackground: GradientDrawable
     private lateinit var palette: Palette
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withFluidThemeMode())
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

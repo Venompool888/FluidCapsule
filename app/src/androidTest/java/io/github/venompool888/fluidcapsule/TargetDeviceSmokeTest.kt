@@ -2,6 +2,7 @@ package io.github.venompool888.fluidcapsule
 
 import android.app.Notification
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
 import android.widget.ListView
@@ -15,6 +16,7 @@ import io.github.venompool888.fluidcapsule.core.CapsuleKind
 import io.github.venompool888.fluidcapsule.core.CapsulePrivacy
 import io.github.venompool888.fluidcapsule.publisher.CapsuleCoordinator
 import io.github.venompool888.fluidcapsule.publisher.NotificationFactory
+import io.github.venompool888.fluidcapsule.notification.TencentMessageAccumulator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -33,8 +35,8 @@ class TargetDeviceSmokeTest {
     fun testInstalledBuildIsExpectedVersion() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-        assertEquals("1.0.1", packageInfo.versionName)
-        assertEquals(34L, packageInfo.longVersionCode)
+        assertEquals("1.1.0", packageInfo.versionName)
+        assertEquals(35L, packageInfo.longVersionCode)
     }
 
     @Test
@@ -57,6 +59,71 @@ class TargetDeviceSmokeTest {
                 assertEquals(1, historyList.headerViewsCount)
             }
         }
+    }
+
+    @Test
+    fun testActionlessCloudEventsGetCloseAction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val now = System.currentTimeMillis()
+        CapsuleKind.entries.forEach { kind ->
+            val eventId = "test-only:actionless:${kind.name}"
+            val notification = NotificationFactory.baseBuilder(
+                context,
+                CapsuleEvent(
+                    sourcePackage = "test.actionless.app",
+                    sourceLabel = "TEST ONLY",
+                    eventId = eventId,
+                    kind = kind,
+                    title = "TEST ONLY actionless",
+                    shortText = "TEST",
+                    body = "NO ACTION REQUIRED",
+                    action = CapsuleAction.None,
+                    privacy = CapsulePrivacy.SHOW_FULL,
+                    createdAtMillis = now,
+                    expiresAtMillis = now + 60_000L,
+                    dedupeKey = eventId,
+                ),
+            ).build()
+
+            assertEquals(1, notification.actions.size)
+            assertEquals("关闭", notification.actions.single().title.toString())
+            assertEquals(
+                Notification.Action.SEMANTIC_ACTION_DELETE,
+                notification.actions.single().semanticAction,
+            )
+        }
+    }
+
+    @Test
+    fun testActionlessQqNotificationGetsOpenReplyAndCloseActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val now = System.currentTimeMillis()
+        val originalIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationFactory.baseBuilder(
+            context,
+            CapsuleEvent(
+                sourcePackage = TencentMessageAccumulator.QQ_PACKAGE,
+                sourceLabel = "QQ",
+                eventId = "test-only:qq-actionless",
+                kind = CapsuleKind.NOTIFICATION,
+                title = "TEST ONLY QQ",
+                shortText = "TEST",
+                body = "NO ACTION REQUIRED",
+                action = CapsuleAction.OpenOriginal(originalIntent),
+                privacy = CapsulePrivacy.SHOW_FULL,
+                createdAtMillis = now,
+                expiresAtMillis = now + 60_000L,
+                dedupeKey = "test-only:qq-actionless",
+            ),
+        ).build()
+
+        assertEquals(listOf("打开回复", "关闭"), notification.actions.map { it.title.toString() })
+        assertEquals(R.drawable.ic_notification_delete, notification.actions[1].getIcon().resId)
     }
 
     @Test
@@ -119,4 +186,5 @@ class TargetDeviceSmokeTest {
 
     private fun Notification.title(): String? =
         extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+
 }

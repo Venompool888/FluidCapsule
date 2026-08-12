@@ -8,6 +8,7 @@ import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.res.ColorStateList
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -58,8 +59,12 @@ import io.github.venompool888.fluidcapsule.settings.CapsuleDisplayDuration
 import io.github.venompool888.fluidcapsule.settings.HistoryRetentionPolicy
 import io.github.venompool888.fluidcapsule.settings.HistoryRetentionUnit
 import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
+import io.github.venompool888.fluidcapsule.settings.ThemeMode
 import io.github.venompool888.fluidcapsule.settings.UserSettings
 import io.github.venompool888.fluidcapsule.settings.WhitelistActivity
+import io.github.venompool888.fluidcapsule.ui.UiPalette
+import io.github.venompool888.fluidcapsule.ui.configureFluidSystemBars
+import io.github.venompool888.fluidcapsule.ui.withFluidThemeMode
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -68,6 +73,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
+    private val palette by lazy { UiPalette.from(this) }
     private lateinit var statusView: TextView
     private lateinit var notificationPermissionButton: Button
     private lateinit var whitelistCountView: TextView
@@ -94,6 +100,10 @@ class MainActivity : Activity() {
     private val historyIconHandler = Handler(Looper.getMainLooper())
     private val historyIconRequests = ConcurrentHashMap.newKeySet<String>()
     private val historyIconCache = object : android.util.LruCache<String, Drawable>(96) {}
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withFluidThemeMode())
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -196,6 +206,8 @@ class MainActivity : Activity() {
             publishTestOtp()
         }
         content.addView(setupCard, matchWidthWrapHeight().apply { bottomMargin = dp(8) })
+        addSectionLabel(content, "暗黑模式", "选择应用外观，不会修改手机的系统主题")
+        content.addView(buildThemeModeCard(), matchWidthWrapHeight().apply { bottomMargin = dp(8) })
         return scrollPage(content)
     }
 
@@ -325,7 +337,7 @@ class MainActivity : Activity() {
             setImageResource(R.mipmap.ic_launcher)
             scaleType = ImageView.ScaleType.CENTER_CROP
             contentDescription = "流体胶囊图标"
-            background = rounded(Color.WHITE, 16f)
+            background = rounded(COLOR_SURFACE, 16f)
             outlineProvider = ViewOutlineProvider.BACKGROUND
             clipToOutline = true
         }, LinearLayout.LayoutParams(dp(62), dp(62)))
@@ -363,14 +375,14 @@ class MainActivity : Activity() {
         setTextColor(COLOR_TEXT_SECONDARY)
         gravity = Gravity.CENTER
         setPadding(dp(14), dp(13), dp(14), dp(13))
-        background = rounded(Color.WHITE, 16f, COLOR_BORDER, 1)
+        background = rounded(COLOR_SURFACE, 16f, COLOR_BORDER, 1)
     }
 
     private fun buildBottomNavigation(): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
         setPadding(dp(6), dp(6), dp(6), dp(6))
-        background = rounded(Color.WHITE, 22f, COLOR_BORDER, 1)
+        background = rounded(COLOR_SURFACE_RAISED, 22f, COLOR_BORDER, 1)
         elevation = dp(12).toFloat()
 
         homeTab = buildNavigationTab("首页", R.drawable.ic_nav_home) { showPage(Page.HOME) }
@@ -791,8 +803,52 @@ class MainActivity : Activity() {
     private fun card(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(12), dp(12), dp(12), dp(12))
-        background = rounded(Color.WHITE, 20f, COLOR_BORDER, 1)
+        background = rounded(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
         elevation = dp(1).toFloat()
+    }
+
+    private fun buildThemeModeCard(): View = card().apply {
+        setPadding(dp(10), dp(10), dp(10), dp(10))
+        val selectedMode = UserSettings.themeMode(this@MainActivity)
+        addView(TextView(this@MainActivity).apply {
+            text = when (selectedMode) {
+                ThemeMode.DARK -> "当前：始终使用暗色外观"
+                ThemeMode.LIGHT -> "当前：始终使用浅色外观"
+                ThemeMode.SYSTEM -> "当前：跟随系统自动切换"
+            }
+            textSize = 13f
+            setTextColor(COLOR_TEXT_SECONDARY)
+            setPadding(dp(5), dp(3), dp(5), dp(10))
+        }, matchWidthWrapHeight())
+
+        val choices = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        listOf(ThemeMode.DARK, ThemeMode.LIGHT, ThemeMode.SYSTEM).forEachIndexed { index, mode ->
+            val selected = mode == selectedMode
+            choices.addView(TextView(this@MainActivity).apply {
+                text = mode.label
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(if (selected) COLOR_PRIMARY_DARK else COLOR_TEXT_SECONDARY)
+                background = RippleDrawable(
+                    ColorStateList.valueOf(COLOR_RIPPLE),
+                    rounded(if (selected) COLOR_ACCENT_SOFT else COLOR_CONTROL, 13f),
+                    rounded(COLOR_SURFACE, 13f),
+                )
+                contentDescription = "暗黑模式：${mode.label}${if (selected) "，已选择" else ""}"
+                setOnClickListener {
+                    if (mode == UserSettings.themeMode(this@MainActivity)) return@setOnClickListener
+                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    UserSettings.setThemeMode(this@MainActivity, mode)
+                    recreate()
+                }
+            }, LinearLayout.LayoutParams(0, dp(48), if (mode == ThemeMode.SYSTEM) 1.25f else 1f).apply {
+                if (index > 0) marginStart = dp(7)
+            })
+        }
+        addView(choices, matchWidthWrapHeight())
     }
 
     private fun buildWhitelistManagementCard(): View = card().apply {
@@ -804,7 +860,7 @@ class MainActivity : Activity() {
             background = RippleDrawable(
                 ColorStateList.valueOf(COLOR_RIPPLE),
                 rounded(COLOR_STATUS_FILL, 16f),
-                rounded(Color.WHITE, 16f),
+                rounded(COLOR_SURFACE, 16f),
             )
         }
         whitelistCountView = TextView(this@MainActivity).apply {
@@ -1107,7 +1163,7 @@ class MainActivity : Activity() {
             background = RippleDrawable(
                 ColorStateList.valueOf(COLOR_RIPPLE),
                 rounded(colors.first, 14f),
-                rounded(Color.WHITE, 14f),
+                rounded(COLOR_SURFACE, 14f),
             )
             stateListAnimator = null
             minHeight = 0
@@ -1267,22 +1323,7 @@ class MainActivity : Activity() {
     private fun statusLine(label: String, enabled: Boolean): String =
         "${if (enabled) "✓" else "○"}  ${label.padEnd(8, '　')} ${if (enabled) "已开启" else "未开启"}"
 
-    @Suppress("DEPRECATION")
-    private fun configureSystemBars() {
-        window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
-        if (Build.VERSION.SDK_INT >= 30) {
-            window.setDecorFitsSystemWindows(false)
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility =
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
-                View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        }
-    }
+    private fun configureSystemBars() = configureFluidSystemBars()
 
     private fun applySystemBarInsets(
         root: View,
@@ -1408,7 +1449,7 @@ class MainActivity : Activity() {
                 dp(if (item.nested) 11 else 13),
             )
             row.background = rounded(
-                if (item.nested) COLOR_STATUS_FILL else Color.WHITE,
+                if (item.nested) COLOR_STATUS_FILL else COLOR_SURFACE,
                 18f,
                 COLOR_BORDER,
                 1,
@@ -1438,7 +1479,7 @@ class MainActivity : Activity() {
             val holder = row.tag as AppGroupRowHolder
             val group = item.group
             row.background = rounded(
-                if (item.expanded) COLOR_ACCENT_SOFT else Color.WHITE,
+                if (item.expanded) COLOR_ACCENT_SOFT else COLOR_SURFACE,
                 18f,
                 if (item.expanded) COLOR_PRIMARY else COLOR_BORDER,
                 1,
@@ -1465,7 +1506,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.TOP
                 setPadding(dp(15), dp(13), dp(15), dp(13))
-                background = rounded(Color.WHITE, 18f, COLOR_BORDER, 1)
+                background = rounded(COLOR_SURFACE, 18f, COLOR_BORDER, 1)
             }
             val icon = ImageView(this@MainActivity).apply {
                 setImageResource(android.R.drawable.sym_def_app_icon)
@@ -1674,23 +1715,26 @@ class MainActivity : Activity() {
         }
     }
 
+    private val COLOR_PAGE get() = palette.page
+    private val COLOR_SURFACE get() = palette.surface
+    private val COLOR_SURFACE_RAISED get() = palette.surfaceRaised
+    private val COLOR_HERO get() = palette.hero
+    private val COLOR_HERO_ACCENT get() = palette.heroAccent
+    private val COLOR_HERO_SECONDARY get() = palette.heroSecondary
+    private val COLOR_PRIMARY get() = palette.primary
+    private val COLOR_PRIMARY_DARK get() = palette.accentText
+    private val COLOR_TEXT_PRIMARY get() = palette.textPrimary
+    private val COLOR_TEXT_SECONDARY get() = palette.textSecondary
+    private val COLOR_TEXT_TERTIARY get() = palette.textTertiary
+    private val COLOR_BORDER get() = palette.border
+    private val COLOR_DIVIDER get() = palette.divider
+    private val COLOR_STATUS_FILL get() = palette.statusFill
+    private val COLOR_CONTROL get() = palette.control
+    private val COLOR_ACCENT_SOFT get() = palette.accentSoft
+    private val COLOR_QUIET get() = palette.quiet
+    private val COLOR_RIPPLE get() = palette.ripple
+
     companion object {
-        private val COLOR_PAGE = Color.rgb(245, 248, 252)
-        private val COLOR_HERO = Color.rgb(11, 39, 64)
-        private val COLOR_HERO_ACCENT = Color.rgb(86, 220, 210)
-        private val COLOR_HERO_SECONDARY = Color.rgb(194, 211, 225)
-        private val COLOR_PRIMARY = Color.rgb(10, 145, 136)
-        private val COLOR_PRIMARY_DARK = Color.rgb(6, 92, 89)
-        private val COLOR_TEXT_PRIMARY = Color.rgb(20, 38, 55)
-        private val COLOR_TEXT_SECONDARY = Color.rgb(66, 81, 96)
-        private val COLOR_TEXT_TERTIARY = Color.rgb(109, 123, 137)
-        private val COLOR_BORDER = Color.rgb(223, 231, 238)
-        private val COLOR_DIVIDER = Color.rgb(234, 239, 244)
-        private val COLOR_STATUS_FILL = Color.rgb(244, 248, 252)
-        private val COLOR_CONTROL = Color.rgb(235, 241, 246)
-        private val COLOR_ACCENT_SOFT = Color.rgb(218, 244, 241)
-        private val COLOR_QUIET = Color.rgb(247, 249, 251)
-        private val COLOR_RIPPLE = Color.argb(48, 10, 145, 136)
         private const val BOTTOM_NAV_HEIGHT_DP = 72
         private const val HISTORY_DISPLAY_LIMIT = 250
     }

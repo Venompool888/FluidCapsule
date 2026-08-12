@@ -22,20 +22,24 @@ import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
 import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
 import io.github.venompool888.fluidcapsule.settings.AppRuleStore
 import io.github.venompool888.fluidcapsule.settings.UserSettings
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 class CapsuleNotificationListenerService : NotificationListenerService() {
     private var lastMirroredSourceKey: String? = null
     private var lastSmartReplies: List<String> = emptyList()
+    private val tencentMessages = TencentMessageAccumulator()
     private val historyExecutor = Executors.newSingleThreadExecutor()
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        connectedInstance = this
         DiagnosticsStore.markListenerConnected(this, true)
         val recentCutoff = System.currentTimeMillis() -
             UserSettings.capsuleDisplayDurationMillis(this)
         val currentNotifications = runCatching { activeNotifications.orEmpty().toList() }
             .getOrDefault(emptyList())
+        drainPendingDismissals(currentNotifications)
         historyExecutor.execute {
             NotificationHistoryStore.reconcileActiveNotifications(
                 applicationContext,
@@ -50,16 +54,19 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onListenerDisconnected() {
+        if (connectedInstance === this) connectedInstance = null
         DiagnosticsStore.markListenerConnected(this, false)
         requestRebind(ComponentName(this, CapsuleNotificationListenerService::class.java))
         super.onListenerDisconnected()
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        if (dismissIfPending(sbn)) return
         processNotification(sbn, currentRanking, recordHistory = true)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap) {
+        if (dismissIfPending(sbn)) return
         processNotification(sbn, rankingMap, recordHistory = true)
     }
 
@@ -73,6 +80,7 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (sbn.packageName != packageName) {
+            tencentMessages.remove(sbn.key)
             CapsuleCoordinator.removeSourceEvent(this, sbn.key)
             historyExecutor.execute {
                 NotificationHistoryStore.markRemoved(applicationContext, sbn.key)
@@ -85,6 +93,7 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onDestroy() {
+        if (connectedInstance === this) connectedInstance = null
         historyExecutor.shutdown()
         super.onDestroy()
     }
@@ -221,29 +230,24 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
             null -> Unit
         }
 
-        val displayTitle = normalized.title
+        val tencentPresentation = tencentMessages.update(
+            packageName = normalized.packageName,
+            notificationKey = normalized.notificationKey,
+            title = normalized.title,
+            primaryText = normalized.primaryText,
+            nowMillis = now,
+        )
+        val displayTitle = (tencentPresentation?.conversationTitle ?: normalized.title)
             .takeIf { it.isNotBlank() && !it.equals(appLabel, ignoreCase = true) }
             ?: appLabel
-        val displayBody = listOf(normalized.primaryText)
-            .map { it.trim() }
-            .filter {
-                it.isNotEmpty() &&
-                    !it.equals(appLabel, ignoreCase = true) &&
-                    !it.equals(displayTitle, ignoreCase = true)
-            }
-            .distinct()
-            .joinToString(" · ")
-            .ifEmpty {
-                normalized.combinedText.lines()
-                    .map(String::trim)
-                    .firstOrNull {
-                        it.isNotEmpty() &&
-                            !it.equals(appLabel, ignoreCase = true) &&
-                            !it.equals(displayTitle, ignoreCase = true)
-                    }
-                    ?: "有新通知"
-            }
-            .take(appRule.maxBodyChars)
+        val displayBody = MessageDisplayFormatter.format(
+            messageTexts = tencentPresentation?.messages ?: normalized.messageTexts,
+            primaryText = normalized.primaryText,
+            combinedText = normalized.combinedText,
+            appLabel = appLabel,
+            displayTitle = displayTitle,
+            maxChars = appRule.maxBodyChars,
+        )
         val rankingFeatures = rankingFeatures(rankingMap, normalized.notificationKey)
         val sourceActions = (normalized.actions + rankingFeatures.smartActions)
             .distinctBy { "${it.semanticAction}:${it.title}" }
@@ -277,6 +281,31 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         recordDecision(shouldRecordHistory, normalized.notificationKey, "PUBLISHED", "白名单规则通过并已提交到流体云")
     }
 
+    private fun dismissIfPending(sbn: StatusBarNotification): Boolean {
+        if (!pendingDismissals.remove(sbn.key)) return false
+        runCatching { cancelNotification(sbn.key) }
+        return true
+    }
+
+    private fun drainPendingDismissals(currentNotifications: List<StatusBarNotification>) {
+        val activeKeys = currentNotifications.mapTo(mutableSetOf()) { it.key }
+        pendingDismissals.toList().forEach { key ->
+            if (key in activeKeys) runCatching { cancelNotification(key) }
+            pendingDismissals.remove(key)
+        }
+    }
+
+    private fun dismissSourceNotificationNow(notificationKey: String): Boolean {
+        val isActive = runCatching {
+            activeNotifications.orEmpty().any { it.key == notificationKey }
+        }.getOrDefault(false)
+        if (!isActive) return false
+        return runCatching {
+            cancelNotification(notificationKey)
+            true
+        }.getOrDefault(false)
+    }
+
     private fun recordDecision(enabled: Boolean, key: String, decision: String, detail: String) {
         if (!enabled) return
         historyExecutor.execute {
@@ -302,4 +331,21 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         val smartReplies: List<String> = emptyList(),
         val smartActions: List<Notification.Action> = emptyList(),
     )
+
+    companion object {
+        @Volatile
+        private var connectedInstance: CapsuleNotificationListenerService? = null
+        private val pendingDismissals = ConcurrentHashMap.newKeySet<String>()
+
+        fun requestSourceNotificationDismissal(
+            context: android.content.Context,
+            notificationKey: String?,
+        ): Boolean {
+            val key = notificationKey?.takeIf(String::isNotBlank) ?: return false
+            if (connectedInstance?.dismissSourceNotificationNow(key) == true) return true
+            pendingDismissals.add(key)
+            requestRebind(ComponentName(context, CapsuleNotificationListenerService::class.java))
+            return true
+        }
+    }
 }

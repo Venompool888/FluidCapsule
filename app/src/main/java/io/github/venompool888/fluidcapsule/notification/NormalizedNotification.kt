@@ -9,6 +9,7 @@ data class NormalizedNotification(
     val notificationKey: String,
     val title: String,
     val primaryText: String,
+    val messageTexts: List<String>,
     val combinedText: String,
     val postedAtMillis: Long,
     val contentIntent: PendingIntent?,

@@ -2,7 +2,7 @@
 
 The CLI script exposes repeatable configuration for development and testing.
 
-Version 1.0 is supported on OPPO CPH2797 running API 36. Always pass the exact serial when more than one ADB target or duplicate wireless-mDNS entry is present.
+Version 1.x is supported on OPPO CPH2797 running API 36. Always pass the exact serial when more than one ADB target or duplicate wireless-mDNS entry is present.
 
 ```bash
 ./scripts/fluid-capsule-cli.sh --serial DEVICE_SERIAL status

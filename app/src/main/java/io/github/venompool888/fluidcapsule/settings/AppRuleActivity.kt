@@ -1,7 +1,9 @@
 package io.github.venompool888.fluidcapsule.settings
 
 import android.app.Activity
+import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -13,8 +15,11 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import io.github.venompool888.fluidcapsule.ui.UiPalette
+import io.github.venompool888.fluidcapsule.ui.withFluidThemeMode
 
 class AppRuleActivity : Activity() {
+    private val palette by lazy { UiPalette.from(this) }
     private lateinit var sourcePackage: String
     private lateinit var ttlValue: TextView
     private lateinit var priorityValue: TextView
@@ -29,6 +34,10 @@ class AppRuleActivity : Activity() {
     private lateinit var maxBodySlider: SeekBar
     private var contentMode = AppRule.CONTENT_INHERIT
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withFluidThemeMode())
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         sourcePackage = intent.getStringExtra(EXTRA_PACKAGE).orEmpty()
@@ -41,10 +50,10 @@ class AppRuleActivity : Activity() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(20), dp(20), dp(32))
-            setBackgroundColor(Color.rgb(245, 248, 252))
+            setBackgroundColor(palette.page)
         }
         content.addView(label(sourceLabel, 25f, true))
-        content.addView(label(sourcePackage, 12f, false).apply { setTextColor(Color.GRAY) })
+        content.addView(label(sourcePackage, 12f, false).apply { setTextColor(palette.textTertiary) })
         content.addView(label("这些设置只影响此应用；“继承”会跟随全局设置。", 13f, false).apply {
             setPadding(0, dp(7), 0, dp(18))
         })
@@ -62,6 +71,8 @@ class AppRuleActivity : Activity() {
         content.addView(sectionTitle("正文隐私"))
         contentModeButton = Button(this).apply {
             isAllCaps = false
+            setTextColor(palette.textPrimary)
+            background = rounded(palette.control, 14f)
             setOnClickListener {
                 contentMode = when (contentMode) {
                     AppRule.CONTENT_INHERIT -> AppRule.CONTENT_SHOW
@@ -74,10 +85,16 @@ class AppRuleActivity : Activity() {
         content.addView(contentModeButton, matchWrap())
 
         @Suppress("DEPRECATION")
-        otpOnlySwitch = Switch(this).apply { text = "仅识别为验证码时上云" }
+        otpOnlySwitch = Switch(this).apply {
+            text = "仅识别为验证码时上云"
+            setTextColor(palette.textPrimary)
+        }
         content.addView(otpOnlySwitch, matchWrap())
         @Suppress("DEPRECATION")
-        recordHistorySwitch = Switch(this).apply { text = "写入本地通知历史" }
+        recordHistorySwitch = Switch(this).apply {
+            text = "写入本地通知历史"
+            setTextColor(palette.textPrimary)
+        }
         content.addView(recordHistorySwitch, matchWrap())
 
         includeInput = keywordInput("包含关键词（逗号分隔；留空表示不限制）")
@@ -88,11 +105,15 @@ class AppRuleActivity : Activity() {
         content.addView(Button(this).apply {
             text = "保存专属规则"
             isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = rounded(palette.primary, 14f)
             setOnClickListener { save() }
         }, matchWrap().apply { topMargin = dp(18) })
         content.addView(Button(this).apply {
             text = "恢复继承全局设置"
             isAllCaps = false
+            setTextColor(palette.textPrimary)
+            background = rounded(palette.control, 14f)
             setOnClickListener {
                 AppRuleStore.reset(this@AppRuleActivity, sourcePackage)
                 NotificationWhitelist.setOtpOnly(this@AppRuleActivity, sourcePackage, false)
@@ -173,6 +194,11 @@ class AppRuleActivity : Activity() {
         textSize = 14f
         minLines = 2
         setPadding(dp(12), dp(12), dp(12), dp(12))
+        setTextColor(palette.textPrimary)
+        setHintTextColor(palette.textTertiary)
+        background = rounded(palette.surface, 14f).apply {
+            setStroke(dp(1), palette.border)
+        }
     }
 
     private fun sectionTitle(text: String) = label(text, 16f, true).apply {
@@ -182,7 +208,7 @@ class AppRuleActivity : Activity() {
     private fun label(text: String, size: Float, bold: Boolean) = TextView(this).apply {
         this.text = text
         textSize = size
-        setTextColor(Color.rgb(20, 43, 68))
+        setTextColor(palette.textPrimary)
         if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
     }
 
@@ -192,6 +218,12 @@ class AppRuleActivity : Activity() {
     )
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private fun rounded(color: Int, radius: Float) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(color)
+        cornerRadius = dp(radius.toInt()).toFloat()
+    }
 
     companion object {
         const val EXTRA_PACKAGE = "package"

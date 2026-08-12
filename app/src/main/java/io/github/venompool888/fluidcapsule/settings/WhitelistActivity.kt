@@ -3,6 +3,7 @@ package io.github.venompool888.fluidcapsule.settings
 import android.app.Activity
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.Context
 import android.content.res.ColorStateList
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -40,9 +41,13 @@ import android.widget.ProgressBar
 import android.widget.Switch
 import android.widget.TextView
 import io.github.venompool888.fluidcapsule.R
+import io.github.venompool888.fluidcapsule.ui.UiPalette
+import io.github.venompool888.fluidcapsule.ui.configureFluidSystemBars
+import io.github.venompool888.fluidcapsule.ui.withFluidThemeMode
 import java.util.concurrent.Executors
 
 class WhitelistActivity : Activity() {
+    private val palette by lazy { UiPalette.from(this) }
     private lateinit var selectedCountView: TextView
     private lateinit var searchInput: EditText
     private lateinit var listView: ListView
@@ -59,6 +64,10 @@ class WhitelistActivity : Activity() {
     private val iconCache = object : android.util.LruCache<String, Drawable>(96) {}
     private var createdAtMillis = 0L
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withFluidThemeMode())
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createdAtMillis = SystemClock.elapsedRealtime()
@@ -67,29 +76,29 @@ class WhitelistActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(245, 248, 252))
+            setBackgroundColor(palette.page)
         }
         root.addView(TextView(this).apply {
             text = "通知岛白名单"
             textSize = 24f
-            setTextColor(Color.rgb(20, 43, 68))
+            setTextColor(palette.textPrimary)
         })
         root.addView(TextView(this).apply {
             text = "勾选后立即生效；每个应用都可以设置独立 TTL、优先级和隐私规则。"
             textSize = 14f
-            setTextColor(Color.DKGRAY)
+            setTextColor(palette.textSecondary)
             setPadding(0, dp(4), 0, dp(10))
         })
 
         refreshSpinner = ProgressBar(this).apply {
             isIndeterminate = true
-            indeterminateTintList = ColorStateList.valueOf(COLOR_REFRESH)
+            indeterminateTintList = ColorStateList.valueOf(palette.refresh)
             contentDescription = "正在获取最新应用列表"
         }
         refreshIndicatorText = TextView(this).apply {
             text = "获取最新应用列表中"
             textSize = 13f
-            setTextColor(COLOR_REFRESH)
+            setTextColor(palette.refresh)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
         refreshIndicator = LinearLayout(this).apply {
@@ -112,7 +121,10 @@ class WhitelistActivity : Activity() {
             hint = "搜索应用名或包名"
             isSingleLine = true
             textSize = 16f
+            setTextColor(palette.textPrimary)
+            setHintTextColor(palette.textTertiary)
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_search, 0, 0, 0)
+            compoundDrawableTintList = ColorStateList.valueOf(palette.textTertiary)
             compoundDrawablePadding = dp(8)
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -126,7 +138,8 @@ class WhitelistActivity : Activity() {
         searchRow.addView(Button(this).apply {
             text = "清除"
             isAllCaps = false
-            background = rippleBackground(Color.rgb(235, 241, 246), 12f)
+            setTextColor(palette.textPrimary)
+            background = rippleBackground(palette.control, 12f)
             setOnTouchListener(pressAnimator())
             setOnClickListener {
                 performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -141,7 +154,7 @@ class WhitelistActivity : Activity() {
         }
         selectedCountView = TextView(this).apply {
             textSize = 14f
-            setTextColor(Color.DKGRAY)
+            setTextColor(palette.textSecondary)
         }
         filterRow.addView(selectedCountView, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -170,7 +183,7 @@ class WhitelistActivity : Activity() {
         loadingView = TextView(this).apply {
             text = "正在读取应用列表…"
             textSize = 15f
-            setTextColor(Color.rgb(109, 123, 137))
+            setTextColor(palette.textTertiary)
             gravity = Gravity.CENTER
         }
         val listFrame = FrameLayout(this).apply {
@@ -216,22 +229,7 @@ class WhitelistActivity : Activity() {
         if (::adapter.isInitialized) adapter.refresh()
     }
 
-    @Suppress("DEPRECATION")
-    private fun configureSystemBars() {
-        window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
-        if (Build.VERSION.SDK_INT >= 30) {
-            window.setDecorFitsSystemWindows(false)
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility =
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
-                View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        }
-    }
+    private fun configureSystemBars() = configureFluidSystemBars()
 
     private fun applySystemBarInsets(root: View) {
         root.setOnApplyWindowInsetsListener { target, insets ->
@@ -275,13 +273,13 @@ class WhitelistActivity : Activity() {
         }
         val labelView = TextView(this).apply {
             textSize = 17f
-            setTextColor(Color.BLACK)
+            setTextColor(palette.textPrimary)
             maxLines = 1
         }
         labels.addView(labelView)
         val packageView = TextView(this).apply {
             textSize = 12f
-            setTextColor(Color.GRAY)
+            setTextColor(palette.textTertiary)
             maxLines = 1
         }
         labels.addView(packageView)
@@ -294,31 +292,31 @@ class WhitelistActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), dp(10), dp(8), dp(10))
-            background = roundedBackground(COLOR_CHILD_RULE, 14f)
+            background = roundedBackground(palette.accentSoft, 14f)
             setOnTouchListener(pressAnimator(0.985f))
         }
         otpOnlyRow.addView(View(this).apply {
-            setBackgroundColor(COLOR_PRIMARY)
+            setBackgroundColor(palette.primary)
         }, LinearLayout.LayoutParams(dp(3), dp(70)).apply { marginEnd = dp(11) })
         val otpOnlyLabels = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
         val otpOwnerLabel = TextView(this).apply {
             textSize = 11f
-            setTextColor(COLOR_PRIMARY)
+            setTextColor(palette.accentText)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
         otpOnlyLabels.addView(otpOwnerLabel)
         val ruleTitle = TextView(this).apply {
             text = "应用专属规则"
             textSize = 15f
-            setTextColor(Color.rgb(20, 43, 68))
+            setTextColor(palette.textPrimary)
         }
         otpOnlyLabels.addView(ruleTitle)
         val ruleSummary = TextView(this).apply {
             text = "TTL、优先级、正文与关键词  ›"
             textSize = 12f
-            setTextColor(Color.GRAY)
+            setTextColor(palette.textTertiary)
         }
         otpOnlyLabels.addView(ruleSummary)
         otpOnlyRow.addView(
@@ -343,7 +341,7 @@ class WhitelistActivity : Activity() {
                 bottomMargin = dp(8)
             })
             addView(View(this@WhitelistActivity).apply {
-                setBackgroundColor(Color.rgb(232, 232, 232))
+                setBackgroundColor(palette.divider)
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
         }
         wrapper.tag = AppRowHolder(
@@ -561,7 +559,7 @@ class WhitelistActivity : Activity() {
     }
 
     private fun rippleBackground(color: Int, radius: Float): RippleDrawable = RippleDrawable(
-        ColorStateList.valueOf(Color.argb(48, 10, 145, 136)),
+        ColorStateList.valueOf(palette.ripple),
         GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             setColor(color)
@@ -569,7 +567,7 @@ class WhitelistActivity : Activity() {
         },
         GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            setColor(Color.WHITE)
+            setColor(palette.surface)
             cornerRadius = dp(radius.toInt()).toFloat()
         },
     )
@@ -643,8 +641,5 @@ class WhitelistActivity : Activity() {
     companion object {
         private const val TAG = "FluidCapsuleWhitelist"
         private const val MIN_REFRESH_INDICATOR_MS = 900L
-        private val COLOR_PRIMARY = Color.rgb(10, 145, 136)
-        private val COLOR_CHILD_RULE = Color.rgb(235, 247, 245)
-        private val COLOR_REFRESH = Color.rgb(224, 112, 24)
     }
 }

@@ -14,6 +14,19 @@ object UserSettings {
     private const val KEY_NOTIFICATION_HISTORY_RETENTION_DAYS = "notification_history_retention_days"
     private const val KEY_NOTIFICATION_HISTORY_RETENTION_VALUE = "notification_history_retention_value"
     private const val KEY_NOTIFICATION_HISTORY_RETENTION_UNIT = "notification_history_retention_unit"
+    private const val KEY_THEME_MODE = "theme_mode"
+
+    fun themeMode(context: Context): ThemeMode = ThemeMode.fromStorageValue(
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_THEME_MODE, ThemeMode.SYSTEM.storageValue),
+    )
+
+    fun setThemeMode(context: Context, mode: ThemeMode) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_THEME_MODE, mode.storageValue)
+            .apply()
+    }
 
     fun showOtpDirectly(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
