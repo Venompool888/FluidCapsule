@@ -54,6 +54,9 @@ class HistoryBackupCodecTest {
             good.dropLast(4), good + " {}",
             good.replace("\"appVersion\": \"1.2.0\",", ""),
             good.replace("\"schemaVersion\": 1,", "\"schemaVersion\": 1, \"schemaVersion\": 1,"),
+            good.replace("\"title\": \"测试标题\"", "\"title\": \"bad\\q\""),
+            good.replace("\"title\": \"测试标题\"", "\"title\": \"bad\nline\""),
+            good.replace("\"appVersion\": \"1.2.0\",", "\"appVersion\": \"1.2.0\", \"extension\": \"bad\\q\","),
         ).forEach { bad ->
             assertThrows(Exception::class.java) { NotificationHistoryBackupCodec.read(StringReader(bad)) }
         }

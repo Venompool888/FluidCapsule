@@ -154,10 +154,11 @@ class NotificationHistoryTransfer(context: Context) {
         executor.execute {
             val next = try {
                 operation()
-            } catch (_: Exception) {
+            } catch (error: Exception) {
                 deleteStagedFile()
                 HistoryTransferState.Finished(
-                    if (exporting) "导出失败，目标文件可能不完整，请重新导出。"
+                    if (error is HistoryRetentionRestoreException) error.message!!
+                    else if (exporting) "导出失败，目标文件可能不完整，请重新导出。"
                     else "无法读取或导入备份。请确认文件是有效的通知历史 JSON 备份，且存储空间和文件访问权限正常。",
                     false,
                 )

@@ -3,6 +3,7 @@ package io.github.venompool888.fluidcapsule.history
 import android.util.JsonReader
 import android.util.JsonToken
 import android.util.JsonWriter
+import android.database.CursorWindow
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.Reader
@@ -83,7 +84,8 @@ object NotificationHistoryBackupCodec {
     fun read(
         input: Reader,
         onEntry: (NotificationHistoryBackupEntry) -> Unit = {},
-    ): NotificationHistoryBackupMetadata = JsonReader(input).use { json ->
+    ): NotificationHistoryBackupMetadata = CursorWindow("history-backup-validation").use { window ->
+        JsonReader(StrictJsonInput(input)).use { json ->
         json.isLenient = false
         require(json.peek() == JsonToken.BEGIN_OBJECT) { "备份顶层必须为对象" }
         val fields = mutableSetOf<String>()
@@ -103,7 +105,7 @@ object NotificationHistoryBackupCodec {
                     require(json.peek() == JsonToken.BEGIN_ARRAY) { "备份记录必须为数组" }
                     json.beginArray()
                     while (json.hasNext()) {
-                        onEntry(readEntry(json))
+                        onEntry(readEntry(json, window))
                         count++
                     }
                     json.endArray()
@@ -117,20 +119,31 @@ object NotificationHistoryBackupCodec {
         }
         require(json.peek() == JsonToken.END_DOCUMENT) { "备份尾部包含多余内容" }
         NotificationHistoryBackupMetadata(appVersion!!, exportedAt!!, count)
+        }
     }
 
-    private fun readEntry(json: JsonReader): NotificationHistoryBackupEntry {
+    private fun readEntry(json: JsonReader, window: CursorWindow): NotificationHistoryBackupEntry {
         require(json.peek() == JsonToken.BEGIN_OBJECT) { "通知记录必须为对象" }
         val seen = mutableSetOf<String>()
         val texts = mutableMapOf<String, String>()
         val times = mutableMapOf<String, Long>()
+        window.clear()
+        check(window.setNumColumns(textFields.size + timeFields.size) && window.allocRow())
         json.beginObject()
         while (json.hasNext()) {
             val name = json.nextName()
             require(seen.add(name)) { "通知记录包含重复字段" }
             when (name) {
-                in textFields -> texts[name] = readText(json)
-                in timeFields -> times[name] = readInteger(json)
+                in textFields -> {
+                    val value = readText(json)
+                    require(window.putString(value, 0, textFields.indexOf(name))) { "单条通知太大，当前设备无法读取" }
+                    texts[name] = value
+                }
+                in timeFields -> {
+                    val value = readInteger(json)
+                    require(window.putLong(value, 0, textFields.size + timeFields.indexOf(name))) { "单条通知太大，当前设备无法读取" }
+                    times[name] = value
+                }
                 else -> json.skipValue()
             }
         }
@@ -159,4 +172,46 @@ object NotificationHistoryBackupCodec {
         require(value.matches(Regex("0|[1-9][0-9]*"))) { "备份数字必须为非负整数" }
         return requireNotNull(value.toLongOrNull()) { "备份数字超出范围" }
     }
+}
+
+/** Android's JsonReader accepts illegal escapes and raw controls; validate every string, even skipped extensions. */
+private class StrictJsonInput(private val input: Reader) : Reader() {
+    private var quoted = false
+    private var escaped = false
+    private var unicodeRemaining = 0
+    private var tokenLength = 0
+
+    override fun read(buffer: CharArray, offset: Int, length: Int): Int {
+        val count = input.read(buffer, offset, length)
+        for (i in offset until offset + count.coerceAtLeast(0)) {
+            val character = buffer[i]
+            if (quoted) {
+                require(++tokenLength <= 16 * 1024 * 1024) { "备份文字字段过长" }
+                when {
+                    unicodeRemaining > 0 -> {
+                        require(character in '0'..'9' || character in 'a'..'f' || character in 'A'..'F') { "非法 Unicode 转义" }
+                        unicodeRemaining--
+                    }
+                    escaped -> {
+                        escaped = false
+                        require(character in "\"\\/bfnrtu") { "非法 JSON 转义" }
+                        if (character == 'u') unicodeRemaining = 4
+                    }
+                    character == '"' -> { quoted = false; tokenLength = 0 }
+                    character == '\\' -> escaped = true
+                    else -> require(character >= ' ') { "JSON 字符串含未转义控制字符" }
+                }
+            } else if (character == '"') {
+                quoted = true
+                tokenLength = 0
+            } else if (character in "{}[],: \t\r\n") {
+                tokenLength = 0
+            } else {
+                require(++tokenLength <= 1024) { "备份数字或字面量过长" }
+            }
+        }
+        return count
+    }
+
+    override fun close() = input.close()
 }

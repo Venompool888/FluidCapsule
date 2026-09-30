@@ -1,6 +1,8 @@
 package io.github.venompool888.fluidcapsule
 
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.venompool888.fluidcapsule.history.*
@@ -126,6 +128,75 @@ class HistoryBackupStoreTest {
         assertTrue(NotificationHistoryStore.forPackage(context, source).isEmpty())
         assertEquals(NotificationHistoryImportResult(0L, 0L, 0L),
             NotificationHistoryStore.importBackup(context, archive(), nextPolicy, false))
+    }
+
+    @Test fun oversizedRecordIsRejectedBeforeItCanBreakHistoryReads() {
+        val file = archive(entry(1).copy(combinedText = "x".repeat(3 * 1024 * 1024)))
+        assertThrows(Exception::class.java) {
+            NotificationHistoryStore.importBackup(context, file, oldPolicy, false)
+        }
+        assertTrue(NotificationHistoryStore.forPackage(context, source).isEmpty())
+        assertEquals(oldPolicy, UserSettings.notificationHistoryRetentionPolicy(context))
+    }
+
+    @Test fun failedDurableRetentionWriteRollsBackImportedRows() {
+        UserSettings.setNotificationHistoryRetentionPolicy(context, HistoryRetentionPolicy.DEFAULT)
+        val failing = object : ContextWrapper(context) {
+            override fun getApplicationContext(): Context = this
+            override fun getSharedPreferences(name: String, mode: Int): SharedPreferences {
+                val actual = context.getSharedPreferences(name, mode)
+                return object : SharedPreferences by actual {
+                    override fun edit(): SharedPreferences.Editor {
+                        val editor = actual.edit()
+                        return object : SharedPreferences.Editor by editor {
+                            override fun putInt(key: String, value: Int): SharedPreferences.Editor {
+                                editor.putInt(key, value)
+                                return this
+                            }
+                            override fun putString(key: String, value: String?): SharedPreferences.Editor {
+                                editor.putString(key, value)
+                                return this
+                            }
+                            override fun commit(): Boolean = false
+                        }
+                    }
+                }
+            }
+        }
+        assertThrows(Exception::class.java) {
+            NotificationHistoryStore.importBackup(failing, archive(entry(1, 0L)), HistoryRetentionPolicy.DEFAULT, true)
+        }
+        assertTrue(NotificationHistoryStore.forPackage(context, source).isEmpty())
+        assertEquals(HistoryRetentionPolicy.DEFAULT, UserSettings.notificationHistoryRetentionPolicy(context))
+    }
+
+    @Test fun historyReadOnMainThreadDoesNotWaitForExportTransaction() {
+        NotificationHistoryStore.record(context, notification(1))
+        val paused = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>()
+        val output = object : Writer() {
+            var first = true
+            override fun write(chars: CharArray, offset: Int, length: Int) {
+                if (first) { first = false; paused.countDown(); check(release.await(10, TimeUnit.SECONDS)) }
+            }
+            override fun flush() {}
+            override fun close() {}
+        }
+        val export = Thread {
+            try { NotificationHistoryStore.exportBackup(context, output, "test", 300L) }
+            catch (error: Throwable) { failure.set(error) }
+        }
+        export.start()
+        assertTrue(paused.await(5, TimeUnit.SECONDS))
+        val safetyRelease = Thread { Thread.sleep(2000); release.countDown() }.apply { start() }
+        val start = System.nanoTime()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { NotificationHistoryStore.count(context) }
+        val elapsedMillis = (System.nanoTime() - start) / 1_000_000
+        release.countDown()
+        export.join(5000); safetyRelease.join(3000)
+        assertNull(failure.get())
+        assertTrue("History query blocked UI for $elapsedMillis ms", elapsedMillis < 1000)
     }
 
     @Test fun exportTransactionExcludesConcurrentUpdatesAndInsertions() {

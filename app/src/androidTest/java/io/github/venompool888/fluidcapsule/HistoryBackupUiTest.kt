@@ -21,6 +21,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.StringWriter
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
 
 @RunWith(AndroidJUnit4::class)
 class HistoryBackupUiTest {
@@ -188,6 +191,36 @@ class HistoryBackupUiTest {
                 dialog(activity)!!.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
             }
             await(scenario) { controller(it).state == HistoryTransferState.Idle }
+        }
+    }
+
+    @Test fun pendingImportDefersConflictingUiActionsWithoutBlockingMainThread() {
+        val uri = archive(false)
+        val acquired = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val lock = NotificationHistoryStore::class.java.getDeclaredField("retentionLock").apply { isAccessible = true }.get(null) as ReentrantLock
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { startImport(it, uri) }
+            await(scenario) { controller(it).state is HistoryTransferState.Preview }
+            val holder = Thread {
+                lock.lock()
+                try { acquired.countDown(); check(release.await(10, TimeUnit.SECONDS)) }
+                finally { lock.unlock() }
+            }
+            holder.start()
+            assertTrue(acquired.await(5, TimeUnit.SECONDS))
+            try {
+                scenario.onActivity { dialog(it)!!.getButton(AlertDialog.BUTTON_POSITIVE).performClick() }
+                await(scenario) { controller(it).state is HistoryTransferState.Working }
+                scenario.onActivity { activity ->
+                    val retention = field(activity, "historyRetentionValueView") as TextView
+                    assertFalse("Retention must not wait on an import lock from UI", retention.isEnabled)
+                    assertFalse((field(activity, "historyClearButton") as Button).isEnabled)
+                    retention.performClick()
+                    assertNull(dialog(activity))
+                }
+            } finally { release.countDown(); holder.join(5000) }
+            await(scenario) { controller(it).state is HistoryTransferState.Finished }
         }
     }
 }

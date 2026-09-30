@@ -11,6 +11,10 @@ import io.github.venompool888.fluidcapsule.settings.UserSettings
 import java.util.UUID
 import java.io.File
 import java.io.Writer
+import java.io.IOException
+import android.os.Looper
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 object NotificationHistoryStore {
     private const val DATABASE_NAME = "notification_history.db"
@@ -21,10 +25,17 @@ object NotificationHistoryStore {
     @Volatile
     private var helper: HistoryDatabase? = null
 
-    private val retentionLock = Any()
+    private val retentionLock = ReentrantLock()
+
+    private fun <T> withHistoryMutation(operation: () -> T): T {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            check(retentionLock.tryLock()) { "通知历史正在处理，请稍后重试" }
+        } else retentionLock.lock()
+        try { return operation() } finally { retentionLock.unlock() }
+    }
 
     /** Generates a complete archive inside one snapshot; destination-provider I/O stays outside it. */
-    fun exportBackup(context: Context, output: Writer, appVersion: String, exportedAtMillis: Long): Long {
+    fun exportBackup(context: Context, output: Writer, appVersion: String, exportedAtMillis: Long): Long = retentionLock.withLock {
         val db = database(context.applicationContext).writableDatabase
         db.beginTransactionNonExclusive()
         try {
@@ -54,7 +65,7 @@ object NotificationHistoryStore {
         expectedPolicy: HistoryRetentionPolicy,
         includeExpired: Boolean,
         cutoffMillis: Long? = expectedPolicy.cutoffMillis(),
-    ): NotificationHistoryImportResult = synchronized(retentionLock) {
+    ): NotificationHistoryImportResult = retentionLock.withLock {
         val appContext = context.applicationContext
         if (UserSettings.notificationHistoryRetentionPolicy(appContext) != expectedPolicy) {
             throw HistoryRetentionChangedException()
@@ -101,28 +112,33 @@ object NotificationHistoryStore {
                 }
                 if (includeExpired && expectedPolicy.unit != HistoryRetentionUnit.FOREVER) {
                     changedRetention = true
-                    UserSettings.setNotificationHistoryRetentionPolicy(
-                        appContext, HistoryRetentionPolicy(0, HistoryRetentionUnit.FOREVER),
-                    )
+                    if (!UserSettings.persistNotificationHistoryRetentionPolicy(
+                            appContext, HistoryRetentionPolicy(0, HistoryRetentionUnit.FOREVER),
+                        )) throw IOException("无法持久保存历史保留期限")
                 }
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
             }
         } catch (error: Exception) {
-            if (changedRetention) UserSettings.setNotificationHistoryRetentionPolicy(appContext, expectedPolicy)
+            if (changedRetention) {
+                UserSettings.setNotificationHistoryRetentionPolicy(appContext, expectedPolicy)
+                if (!UserSettings.persistNotificationHistoryRetentionPolicy(appContext, expectedPolicy)) {
+                    throw HistoryRetentionRestoreException(error)
+                }
+            }
             throw error
         }
         NotificationHistoryImportResult(inserted, duplicates, expired)
     }
 
-    fun setRetentionPolicy(context: Context, policy: HistoryRetentionPolicy): Int = synchronized(retentionLock) {
+    fun setRetentionPolicy(context: Context, policy: HistoryRetentionPolicy): Int = withHistoryMutation {
         UserSettings.setNotificationHistoryRetentionPolicy(context, policy)
         purgeExpired(context, policy)
     }
 
     /** Fetch policy after acquiring the lock: an automatic purge must not use a stale pre-import policy. */
-    fun purgeExpiredForCurrentPolicy(context: Context): Int = synchronized(retentionLock) {
+    fun purgeExpiredForCurrentPolicy(context: Context): Int = retentionLock.withLock {
         purgeExpired(context, UserSettings.notificationHistoryRetentionPolicy(context))
     }
 
@@ -194,25 +210,28 @@ object NotificationHistoryStore {
         )
     }
 
-    fun deleteEntry(context: Context, id: Long): Int =
+    fun deleteEntry(context: Context, id: Long): Int = withHistoryMutation {
         database(context.applicationContext).writableDatabase.delete(
             TABLE_HISTORY,
             "id = ?",
             arrayOf(id.toString()),
         )
+    }
 
-    fun deletePackage(context: Context, sourcePackage: String): Int =
+    fun deletePackage(context: Context, sourcePackage: String): Int = withHistoryMutation {
         database(context.applicationContext).writableDatabase.delete(
             TABLE_HISTORY,
             "package_name = ?",
             arrayOf(sourcePackage),
         )
+    }
 
-    fun clear(context: Context): Int =
+    fun clear(context: Context): Int = withHistoryMutation {
         database(context.applicationContext).writableDatabase.delete(TABLE_HISTORY, null, null)
+    }
 
-    fun purgeExpired(context: Context, policy: HistoryRetentionPolicy): Int = synchronized(retentionLock) {
-        val cutoff = policy.cutoffMillis() ?: return@synchronized 0
+    fun purgeExpired(context: Context, policy: HistoryRetentionPolicy): Int = withHistoryMutation {
+        val cutoff = policy.cutoffMillis() ?: return@withHistoryMutation 0
         database(context.applicationContext).writableDatabase.delete(
             TABLE_HISTORY,
             "captured_at < ?",
@@ -391,6 +410,8 @@ object NotificationHistoryStore {
 
     private class HistoryDatabase(context: Context) :
         SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
+
+        init { setWriteAheadLoggingEnabled(true) }
 
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL(

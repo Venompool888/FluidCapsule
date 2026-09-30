@@ -106,6 +106,7 @@ class MainActivity : Activity() {
     private lateinit var historyTransfer: NotificationHistoryTransfer
     private lateinit var historyExportButton: Button
     private lateinit var historyImportButton: Button
+    private lateinit var historyClearButton: Button
     private lateinit var historyTransferStatus: TextView
     private lateinit var historyRetentionValueView: TextView
     private var historyTransferDialog: AlertDialog? = null
@@ -768,12 +769,14 @@ class MainActivity : Activity() {
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         privacyCard.addView(historyTransferStatus, matchWidthWrapHeight())
-        privacyCard.addActionButton("清空全部通知历史", ButtonTone.QUIET) {
+        historyClearButton = privacyCard.addActionButton("清空全部通知历史", ButtonTone.QUIET) {
+            if (deferHistoryMutation()) return@addActionButton
             AlertDialog.Builder(this)
                 .setTitle("清空通知历史？")
                 .setMessage("这会永久删除本机保存的全部通知正文和处理结果。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("清空") { _, _ ->
+                    if (deferHistoryMutation()) return@setPositiveButton
                     val deleted = NotificationHistoryStore.clear(this)
                     expandedHistoryPackage = null
                     refreshHistory(animate = true)
@@ -882,6 +885,8 @@ class MainActivity : Activity() {
         val busy = state != HistoryTransferState.Idle
         historyExportButton.isEnabled = !busy
         historyImportButton.isEnabled = !busy
+        historyClearButton.isEnabled = !busy
+        historyRetentionValueView.isEnabled = !busy
         historyTransferStatus.text = when (state) {
             is HistoryTransferState.Working -> state.message
             is HistoryTransferState.Picking -> "正在选择${if (state.action == HistoryTransferAction.EXPORT) "保存位置" else "备份文件"}…"
@@ -1032,11 +1037,13 @@ class MainActivity : Activity() {
     }
 
     private fun confirmDeleteHistoryEntry(entry: NotificationHistoryEntry) {
+        if (deferHistoryMutation()) return
         AlertDialog.Builder(this)
             .setTitle("删除这条通知？")
             .setMessage("${entry.sourceLabel} · ${entry.title.ifBlank { "无标题" }}")
             .setNegativeButton("取消", null)
             .setPositiveButton("删除") { _, _ ->
+                if (deferHistoryMutation()) return@setPositiveButton
                 NotificationHistoryStore.deleteEntry(this, entry.id)
                 refreshHistory(animate = true)
             }
@@ -1044,11 +1051,13 @@ class MainActivity : Activity() {
     }
 
     private fun confirmDeleteHistoryPackage(sourcePackage: String, sourceLabel: String) {
+        if (deferHistoryMutation()) return
         AlertDialog.Builder(this)
             .setTitle("删除 ${sourceLabel.ifBlank { sourcePackage }} 的历史？")
             .setMessage("只删除本机历史，不会修改该应用的白名单或专属规则。")
             .setNegativeButton("取消", null)
             .setPositiveButton("删除") { _, _ ->
+                if (deferHistoryMutation()) return@setPositiveButton
                 val deleted = NotificationHistoryStore.deletePackage(this, sourcePackage)
                 expandedHistoryPackage = null
                 refreshHistory(animate = true)
@@ -1358,6 +1367,7 @@ class MainActivity : Activity() {
     }
 
     private fun showHistoryRetentionDialog(valueView: TextView) {
+        if (deferHistoryMutation()) return
         val currentPolicy = UserSettings.notificationHistoryRetentionPolicy(this)
         val units = HistoryRetentionUnit.entries
         val numberPicker = NumberPicker(this).apply {
@@ -1404,6 +1414,7 @@ class MainActivity : Activity() {
             .setView(dialogContent)
             .setNegativeButton("取消", null)
             .setPositiveButton("保存") { _, _ ->
+                if (deferHistoryMutation()) return@setPositiveButton
                 val unit = units[unitPicker.value]
                 val policy = if (unit == HistoryRetentionUnit.FOREVER) {
                     HistoryRetentionPolicy(0, unit)
@@ -1417,6 +1428,12 @@ class MainActivity : Activity() {
                 toast("历史将${if (policy.unit == HistoryRetentionUnit.FOREVER) "永久保存" else "保留 ${policy.chineseLabel()}"}")
             }
             .show()
+    }
+
+    private fun deferHistoryMutation(): Boolean {
+        if (historyTransfer.state == HistoryTransferState.Idle) return false
+        toast("通知历史正在处理，请稍后重试")
+        return true
     }
 
     @SuppressLint("ClickableViewAccessibility")

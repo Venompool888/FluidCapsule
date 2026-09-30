@@ -142,4 +142,11 @@ object UserSettings {
             .putString(KEY_NOTIFICATION_HISTORY_RETENTION_UNIT, policy.unit.storageValue)
             .apply()
     }
+
+    /** Called off the UI thread before committing an import-all batch. */
+    fun persistNotificationHistoryRetentionPolicy(context: Context, policy: HistoryRetentionPolicy): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_NOTIFICATION_HISTORY_RETENTION_VALUE, policy.value)
+            .putString(KEY_NOTIFICATION_HISTORY_RETENTION_UNIT, policy.unit.storageValue)
+            .commit()
 }
