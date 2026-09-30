@@ -32,7 +32,7 @@
 {
   "format": "fluidcapsule.notification-history",
   "schemaVersion": 1,
-  "appVersion": "1.2.0",
+  "appVersion": "1.3.0",
   "exportedAtMillis": 1790776800000,
   "entries": [
     {
