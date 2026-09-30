@@ -84,9 +84,8 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
         }
         "set-history-retention" -> {
             val policy = requiredRetentionPolicy(intent)
-            UserSettings.setNotificationHistoryRetentionPolicy(context, policy)
             retentionResult(command, policy)
-                .put("deleted", NotificationHistoryStore.purgeExpired(context, policy))
+                .put("deleted", NotificationHistoryStore.setRetentionPolicy(context, policy))
         }
         "app-rule-get" -> result(command).put("rule", ruleJson(context, requiredPackage(intent)))
         "app-rule-set" -> updateAppRule(context, intent)

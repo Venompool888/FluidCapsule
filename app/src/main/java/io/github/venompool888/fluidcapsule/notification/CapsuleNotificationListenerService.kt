@@ -115,10 +115,7 @@ class CapsuleNotificationListenerService : NotificationListenerService() {
         if (shouldRecordHistory) {
             historyExecutor.execute {
                 NotificationHistoryStore.record(applicationContext, normalized)
-                NotificationHistoryStore.purgeExpired(
-                    applicationContext,
-                    UserSettings.notificationHistoryRetentionPolicy(applicationContext),
-                )
+                NotificationHistoryStore.purgeExpiredForCurrentPolicy(applicationContext)
             }
         }
         val defaultSmsPackage = Telephony.Sms.getDefaultSmsPackage(this)
