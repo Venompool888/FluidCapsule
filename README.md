@@ -24,6 +24,7 @@ Turn Android notifications into interactive live notifications on supported Colo
 
 - Listen for notifications from user-selected apps.
 - Optionally keep a local notification history. Choose a retention period in days, months, or years, or keep it forever. Turning recording off never deletes existing entries; history can be browsed by time or by folded app groups ordered by notification count.
+- Export a complete JSON history backup and import it through the system document picker, merging without overwriting existing records. [Backup guide](docs/HISTORY_BACKUP.md).
 - Extract one-time passwords from SMS notifications and display the code directly.
 - Copy an OTP by tapping its capsule, with an optional masked clipboard preview.
 - Recognize explicit email, account, and identity verification requests. A matching URL gets an `Open verification link` action; when the notification exposes no URL, its original destination can be opened instead. Ordinary links are not treated as verification links.
@@ -43,6 +44,7 @@ Turn Android notifications into interactive live notifications on supported Colo
 
 - 监听用户主动选择的应用通知。
 - 可选保存本地通知历史；可按天、月、年设置保留期，也可永久保存。关闭记录不会删除已有内容，支持按时间浏览或按应用通知次数折叠分组。
+- 通过系统文件选择器导出全部通知历史为 JSON 备份，再导入合并；重复记录跳过，不覆盖本机已有内容。详见[备份说明](docs/HISTORY_BACKUP.md)。
 - 从短信通知中提取一次性验证码并直接显示。
 - 点击胶囊复制验证码，并可选择隐藏剪贴板预览中的敏感内容。
 - 识别明确的邮箱、账户和身份验证请求；通知含匹配网址时提供“打开验证链接”，没有可见网址时可跳转原通知。普通链接不会被识别成验证链接。
@@ -162,7 +164,11 @@ Download the signed APK from [Releases](https://github.com/Venompool888/FluidCap
 
 Protected ADB history export is documented in [CLI](docs/CLI.md). Exported files contain complete notification text and should remain private.
 
+The History page also supports [JSON backup and restore](docs/HISTORY_BACKUP.md), independently of the protected ADB export protocol.
+
 受权限保护的 ADB 历史导出见 [CLI](docs/CLI.md)。导出文件包含完整通知正文，请私下保存。
+
+历史页面也支持 [JSON 备份与恢复](docs/HISTORY_BACKUP.md)，使用独立于 ADB 分页响应的备份文件格式。
 
 ## Initial setup / 初始设置
 

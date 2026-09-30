@@ -52,6 +52,9 @@ import io.github.venompool888.fluidcapsule.diagnostics.DiagnosticsStore
 import io.github.venompool888.fluidcapsule.history.NotificationHistoryAppGroup
 import io.github.venompool888.fluidcapsule.history.NotificationHistoryEntry
 import io.github.venompool888.fluidcapsule.history.NotificationHistoryStore
+import io.github.venompool888.fluidcapsule.history.NotificationHistoryTransfer
+import io.github.venompool888.fluidcapsule.history.HistoryTransferAction
+import io.github.venompool888.fluidcapsule.history.HistoryTransferState
 import io.github.venompool888.fluidcapsule.keepalive.KeepAliveService
 import io.github.venompool888.fluidcapsule.notification.CapsuleNotificationListenerService
 import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
@@ -100,6 +103,13 @@ class MainActivity : Activity() {
     private lateinit var historyAdapter: NotificationHistoryAdapter
     private lateinit var historySortTimeTab: TextView
     private lateinit var historySortCountTab: TextView
+    private lateinit var historyTransfer: NotificationHistoryTransfer
+    private lateinit var historyExportButton: Button
+    private lateinit var historyImportButton: Button
+    private lateinit var historyTransferStatus: TextView
+    private lateinit var historyRetentionValueView: TextView
+    private var historyTransferDialog: AlertDialog? = null
+    private var historyDialogState: HistoryTransferState? = null
     private var currentPage = Page.HOME
     private var historySortMode = HistorySortMode.TIME
     private var expandedHistoryPackage: String? = null
@@ -124,6 +134,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        historyTransfer = lastNonConfigurationInstance as? NotificationHistoryTransfer
+            ?: NotificationHistoryTransfer(this)
         rulePrefs = RuleSubscriptionPrefs(this)
         ruleGateway = RuleUpdateGatewayProvider.create(this)
         title = "流体胶囊"
@@ -196,6 +208,40 @@ class MainActivity : Activity() {
             .setDuration(240)
             .setInterpolator(DecelerateInterpolator())
             .start()
+        savedInstanceState?.getString("history.currentPage")?.let { savedPage ->
+            Page.entries.firstOrNull { it.name == savedPage }?.let(::showPage)
+        }
+        if (lastNonConfigurationInstance == null) {
+            val picker = savedInstanceState?.getString("history.picker")
+            if (picker != null) {
+                HistoryTransferAction.entries.firstOrNull { it.name == picker }?.let(historyTransfer::beginPicking)
+            } else if (savedInstanceState?.getBoolean("history.busy") == true) {
+                historyTransfer.interrupted()
+            }
+        }
+        historyTransfer.attach(::renderHistoryTransfer)
+    }
+
+    override fun onRetainNonConfigurationInstance(): Any = historyTransfer
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("history.currentPage", currentPage.name)
+        outState.putString("history.picker", (historyTransfer.state as? HistoryTransferState.Picking)?.action?.name)
+        outState.putBoolean("history.busy", historyTransfer.state != HistoryTransferState.Idle)
+        super.onSaveInstanceState(outState)
+    }
+
+    @Deprecated("Platform document picker result callback")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val action = when (requestCode) {
+            HISTORY_EXPORT_REQUEST -> HistoryTransferAction.EXPORT
+            HISTORY_IMPORT_REQUEST -> HistoryTransferAction.IMPORT
+            else -> return
+        }
+        if ((historyTransfer.state as? HistoryTransferState.Picking)?.action == action) {
+            historyTransfer.acceptDocument(data?.data.takeIf { resultCode == RESULT_OK })
+        }
     }
 
     override fun onResume() {
@@ -206,6 +252,9 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        historyTransfer.detach()
+        historyTransferDialog?.dismiss()
+        if (!isChangingConfigurations) historyTransfer.close()
         historyIconLoader.shutdownNow()
         rulesExecutor.shutdownNow()
         ruleUpdateDialog?.dismiss()
@@ -709,6 +758,16 @@ class MainActivity : Activity() {
 
         val privacyCard = card()
         privacyCard.addHistoryRetentionSetting()
+        historyExportButton = privacyCard.addActionButton("导出历史") { pickHistoryDocument(HistoryTransferAction.EXPORT) }
+        historyImportButton = privacyCard.addActionButton("导入历史") { pickHistoryDocument(HistoryTransferAction.IMPORT) }
+        historyTransferStatus = TextView(this).apply {
+            textSize = 13f
+            setTextColor(COLOR_TEXT_SECONDARY)
+            setPadding(dp(5), dp(4), dp(5), dp(8))
+            visibility = View.GONE
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        privacyCard.addView(historyTransferStatus, matchWidthWrapHeight())
         privacyCard.addActionButton("清空全部通知历史", ButtonTone.QUIET) {
             AlertDialog.Builder(this)
                 .setTitle("清空通知历史？")
@@ -795,6 +854,77 @@ class MainActivity : Activity() {
         }
         refreshHistory()
         return historyListView
+    }
+
+    private fun pickHistoryDocument(action: HistoryTransferAction) {
+        if (!historyTransfer.beginPicking(action)) return
+        val exporting = action == HistoryTransferAction.EXPORT
+        val intent = Intent(if (exporting) Intent.ACTION_CREATE_DOCUMENT else Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+            if (exporting) {
+                val date = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+                putExtra(Intent.EXTRA_TITLE, "FluidCapsule-history-$date.json")
+            }
+        }
+        try {
+            startActivityForResult(intent, if (exporting) HISTORY_EXPORT_REQUEST else HISTORY_IMPORT_REQUEST)
+        } catch (_: ActivityNotFoundException) {
+            historyTransfer.acceptDocument(null)
+            toast("没有可用的文件选择器")
+        } catch (_: SecurityException) {
+            historyTransfer.acceptDocument(null)
+            toast("无法打开文件选择器")
+        }
+    }
+
+    private fun renderHistoryTransfer(state: HistoryTransferState) {
+        val busy = state != HistoryTransferState.Idle
+        historyExportButton.isEnabled = !busy
+        historyImportButton.isEnabled = !busy
+        historyTransferStatus.text = when (state) {
+            is HistoryTransferState.Working -> state.message
+            is HistoryTransferState.Picking -> "正在选择${if (state.action == HistoryTransferAction.EXPORT) "保存位置" else "备份文件"}…"
+            else -> ""
+        }
+        historyTransferStatus.visibility = if (historyTransferStatus.text.isEmpty()) View.GONE else View.VISIBLE
+        if (historyDialogState == state && historyTransferDialog?.isShowing == true) return
+        historyTransferDialog?.dismiss()
+        historyTransferDialog = null
+        historyDialogState = state
+        when (state) {
+            is HistoryTransferState.Preview -> {
+                val expired = state.expired > 0
+                val message = "备份共 ${state.metadata.count} 条记录。\n当前保留期限：${state.policy.chineseLabel()}。\n" +
+                    "超过当前期限：${state.expired} 条。\n导入会保留本机历史，并跳过重复记录。" +
+                    if (expired) "\n选择导入全部会将本机历史保留期限改为永久。" else ""
+                val builder = AlertDialog.Builder(this)
+                    .setTitle("导入通知历史")
+                    .setMessage(message)
+                    .setNegativeButton("取消") { _, _ -> historyTransfer.cancelPreview() }
+                    .setPositiveButton(if (expired) "仅导入期限内记录" else "导入") { _, _ -> historyTransfer.confirmImport(false) }
+                    .setOnCancelListener { historyTransfer.cancelPreview() }
+                if (expired) builder.setNeutralButton("改为永久并导入全部") { _, _ -> historyTransfer.confirmImport(true) }
+                historyTransferDialog = builder.create().also { dialog ->
+                    dialog.show()
+                    // Long choices remain legible on narrow screens.
+                    for (which in listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEUTRAL)) {
+                        dialog.getButton(which)?.apply { isSingleLine = false; maxLines = 3 }
+                    }
+                }
+            }
+            is HistoryTransferState.Finished -> {
+                refreshHistory(animate = state.success)
+                historyRetentionValueView.text = UserSettings.notificationHistoryRetentionPolicy(this).bilingualLabel()
+                historyTransferDialog = AlertDialog.Builder(this)
+                    .setTitle(if (state.success) "操作完成" else "操作失败")
+                    .setMessage(state.message)
+                    .setPositiveButton("确定") { _, _ -> historyTransfer.acknowledgeResult() }
+                    .setOnCancelListener { historyTransfer.acknowledgeResult() }
+                    .show()
+            }
+            else -> Unit
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -1214,6 +1344,7 @@ class MainActivity : Activity() {
             isFocusable = true
             setOnClickListener { showHistoryRetentionDialog(this) }
         }
+        historyRetentionValueView = valueView
         addView(valueView, matchWidthWrapHeight().apply {
             topMargin = dp(10)
             bottomMargin = dp(8)
@@ -1279,8 +1410,7 @@ class MainActivity : Activity() {
                 } else {
                     HistoryRetentionPolicy(numberPicker.value, unit)
                 }
-                UserSettings.setNotificationHistoryRetentionPolicy(this, policy)
-                val deleted = NotificationHistoryStore.purgeExpired(this, policy)
+                val deleted = NotificationHistoryStore.setRetentionPolicy(this, policy)
                 valueView.text = policy.bilingualLabel()
                 valueView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 refreshHistory(animate = deleted > 0)
@@ -1882,6 +2012,8 @@ class MainActivity : Activity() {
     private val COLOR_RIPPLE get() = palette.ripple
 
     companion object {
+        private const val HISTORY_EXPORT_REQUEST = 4101
+        private const val HISTORY_IMPORT_REQUEST = 4102
         private const val BOTTOM_NAV_HEIGHT_DP = 72
         private const val HISTORY_DISPLAY_LIMIT = 250
     }
