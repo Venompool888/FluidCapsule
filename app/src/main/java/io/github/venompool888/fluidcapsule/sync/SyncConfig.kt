@@ -41,12 +41,14 @@ class SyncConfig(context: Context) {
     fun storeConnection(server: String, response: org.json.JSONObject) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, tokenKey()) }
         val encrypted = cipher.doFinal(response.getString("deviceToken").toByteArray(Charsets.UTF_8))
-        check(prefs.edit().clear().putString("server", server)
-            .putString("device_id", response.getString("deviceId"))
-            .putString("account", response.optString("account"))
-            .putString("token_iv", Base64.getEncoder().encodeToString(cipher.iv))
-            .putString("token_ciphertext", Base64.getEncoder().encodeToString(encrypted)).commit()) {
-            "无法安全保存设备令牌"
+        synchronized(connectionLock) {
+            check(prefs.edit().clear().putString("server", server)
+                .putString("device_id", response.getString("deviceId"))
+                .putString("account", response.optString("account"))
+                .putString("token_iv", Base64.getEncoder().encodeToString(cipher.iv))
+                .putString("token_ciphertext", Base64.getEncoder().encodeToString(encrypted)).commit()) {
+                "无法安全保存设备令牌"
+            }
         }
     }
 
@@ -57,8 +59,17 @@ class SyncConfig(context: Context) {
     fun requiresHttpApproval(server: String): Boolean = SyncApi.needsHttpConfirmation(server) && !httpApprovals.getBoolean(server, false)
     fun approveHttp(server: String) { httpApprovals.edit().putBoolean(server, true).apply() }
 
-    fun recordError(message: String) { prefs.edit().putString("last_error", message).apply() }
-    fun clear() { check(prefs.edit().clear().commit()) { "无法清除同步设置" } }
+    fun recordError(message: String?) { prefs.edit().putString("last_error", message).apply() }
+
+    fun recordRealtimeError(deviceId: String, message: String) {
+        synchronized(connectionLock) {
+            if (this.deviceId == deviceId) recordError(message)
+        }
+    }
+
+    fun clear() {
+        synchronized(connectionLock) { check(prefs.edit().clear().commit()) { "无法清除同步设置" } }
+    }
 
     fun processedIds(): LinkedHashSet<String> {
         val ids = JSONArray(prefs.getString("processed", "[]"))
@@ -84,5 +95,8 @@ class SyncConfig(context: Context) {
         }.generateKey()
     }
 
-    companion object { private const val TOKEN_ALIAS = "fluidcapsule_sync_token_v1" }
+    companion object {
+        private const val TOKEN_ALIAS = "fluidcapsule_sync_token_v1"
+        private val connectionLock = Any()
+    }
 }

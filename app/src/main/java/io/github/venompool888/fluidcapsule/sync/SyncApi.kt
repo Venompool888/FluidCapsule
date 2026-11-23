@@ -9,19 +9,24 @@ class SyncApi(private val server: String, private val token: String, private val
     fun get(path: String): JSONObject = request("GET", path)
     fun post(path: String, body: JSONObject): JSONObject = request("POST", path, body)
     fun put(path: String, body: JSONObject): JSONObject = request("PUT", path, body)
-    fun waitForMessages(): Boolean = request("GET", "/api/v1/messages/wait?timeout=25", readTimeoutMs = 35_000)
-        .optBoolean("available", false)
+    // Leave room for the server's idle response before the client read timeout.
+    fun waitForMessages(onOpen: (HttpURLConnection) -> Unit): Boolean =
+        request("GET", "/api/v1/messages/wait?timeout=10", onOpen = onOpen).getBoolean("available")
 
-    private fun request(method: String, path: String, body: JSONObject? = null, readTimeoutMs: Int = 20_000): JSONObject {
+    private fun request(
+        method: String, path: String, body: JSONObject? = null, onOpen: ((HttpURLConnection) -> Unit)? = null,
+    ): JSONObject {
         val connection = URI(server + path).toURL().openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 15_000
-            connection.readTimeout = readTimeoutMs
+            connection.readTimeout = 15_000
+            connection.useCaches = false
             connection.instanceFollowRedirects = false
             connection.requestMethod = method
             connection.setRequestProperty("Accept", "application/json")
             connection.setRequestProperty("User-Agent", "FluidCapsule-Android/$versionName")
             if (token.isNotBlank()) connection.setRequestProperty("Authorization", "Bearer $token")
+            onOpen?.invoke(connection)
             if (body != null) writeBody(connection, body)
             val status = connection.responseCode
             val stream = if (status >= 400) connection.errorStream else connection.inputStream

@@ -26,6 +26,7 @@ import android.widget.TextView
 import io.github.venompool888.fluidcapsule.ui.UiPalette
 import io.github.venompool888.fluidcapsule.ui.configureFluidSystemBars
 import io.github.venompool888.fluidcapsule.ui.withFluidThemeMode
+import org.json.JSONObject
 import java.net.URI
 
 class SyncSettingsActivity : Activity() {
@@ -34,7 +35,9 @@ class SyncSettingsActivity : Activity() {
     private lateinit var content: LinearLayout
     private lateinit var errorText: TextView
     private var statusText: TextView? = null
-    private var deviceState: SyncDeviceState? = null
+    private var devicesCard: LinearLayout? = null
+    private var renderedStateJson: String? = null
+    private var renderedDeviceState: SyncDeviceState? = null
     private var busy = false
     private var codeMode = true
     private var serverDraft = ""
@@ -43,6 +46,7 @@ class SyncSettingsActivity : Activity() {
     private val statusRefresh = object : Runnable {
         override fun run() {
             updateStatus()
+            if (!busy) updateDevices()
             main.postDelayed(this, 1_000)
         }
     }
@@ -108,6 +112,9 @@ class SyncSettingsActivity : Activity() {
     private fun render() {
         content.removeAllViews()
         statusText = null
+        devicesCard = null
+        renderedStateJson = null
+        renderedDeviceState = null
         errorText = label("", 14).apply {
             setTextColor(errorColor())
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
@@ -177,7 +184,7 @@ class SyncSettingsActivity : Activity() {
     private fun connect(credentials: SyncCredentials, connect: Button) {
         connect.text = "连接中…"
         connect.isEnabled = false
-        runNetwork({ SyncEngine.connect(this, credentials) }, { state -> deviceState = state; render() }, {
+        runNetwork({ SyncEngine.connect(this, credentials) }, { render() }, {
             connect.text = "连接"
             connect.isEnabled = true
             // Registration may succeed before a subsequent device refresh fails.
@@ -188,7 +195,7 @@ class SyncSettingsActivity : Activity() {
 
     private fun renderConnected() {
         val config = SyncConfig(this)
-        val state = deviceState ?: config.cachedState.takeIf { it.isNotBlank() }?.let { SyncEngine.parseState(org.json.JSONObject(it)) }
+        val state = config.cachedState.takeIf { it.isNotBlank() }?.let { SyncEngine.parseState(JSONObject(it)) }
         val summary = card()
         content.addView(summary, spaced())
         summary.addView(label(config.account, 20).apply { setTypeface(typeface, Typeface.BOLD) })
@@ -197,26 +204,19 @@ class SyncSettingsActivity : Activity() {
         statusText = label("", 14).also { summary.addView(it, spaced()) }
         updateStatus()
         content.addView(label("从这些设备接收短信", 18).apply { setTypeface(typeface, Typeface.BOLD) }, spaced())
-        val devices = card()
-        content.addView(devices, spaced())
-        if (state == null) devices.addView(label("正在获取设备…", 14))
-        else {
-            val others = state.devices.filter { it.id != config.deviceId }
-            if (others.isEmpty()) devices.addView(label("还没有其他设备。在胶囊短信的「云备份与同步」里连接同一账号后，这里会出现它。", 14, palette.textSecondary))
-            others.forEach { addDeviceRow(devices, it, state) }
-        }
-        content.addView(errorText, spaced())
+        devicesCard = card().also { content.addView(it, spaced()) }
+        updateDevices()
         val sync = button("立即同步")
         sync.isEnabled = !busy
         content.addView(sync, spaced())
         sync.setOnClickListener {
             sync.text = "同步中…"
             sync.isEnabled = false
-            runNetwork({
-                val count = SyncEngine.pull(this)
-                SyncRealtimeService.update(this)
-                count
-            }, { count -> sync.text = "已同步 $count 条 · 立即同步"; sync.isEnabled = true; refreshDevices() }, {
+            runNetwork({ SyncEngine.pull(this) }, { count ->
+                sync.text = "已同步 $count 条 · 立即同步"
+                updateDevices()
+                updateStatus()
+            }, {
                 sync.text = "立即同步"; sync.isEnabled = true; showError(it)
             })
         }
@@ -225,8 +225,28 @@ class SyncSettingsActivity : Activity() {
         disconnect.setOnClickListener {
             AlertDialog.Builder(this).setTitle("断开短信云同步？").setMessage("将清除本机连接设置和设备令牌。")
                 .setNegativeButton("取消", null).setPositiveButton("断开连接") { _, _ ->
-                    runNetwork({ SyncEngine.disconnect(this) }, { deviceState = null; render() })
+                    runNetwork({ SyncEngine.disconnect(this) }, { render() })
                 }.show()
+        }
+    }
+
+    private fun updateDevices() {
+        val devices = devicesCard ?: return
+        val json = SyncConfig(this).cachedState
+        if (json == renderedStateJson) return
+        val state = json.takeIf { it.isNotBlank() }?.let {
+            val latest = SyncEngine.parseState(JSONObject(it))
+            latest.copy(devices = latest.devices.filter { device -> device.id != latest.currentDeviceId })
+        }
+        val needsRender = renderedStateJson == null || renderedDeviceState != state
+        renderedStateJson = json
+        renderedDeviceState = state
+        if (!needsRender) return
+        devices.removeAllViews()
+        when {
+            state == null -> devices.addView(label("正在获取设备…", 14))
+            state.devices.isEmpty() -> devices.addView(label("还没有其他设备。在胶囊短信的「云备份与同步」里连接同一账号后，这里会出现它。", 14, palette.textSecondary))
+            else -> state.devices.forEach { addDeviceRow(devices, it, state) }
         }
     }
 
@@ -247,8 +267,11 @@ class SyncSettingsActivity : Activity() {
         parent.addView(row, LinearLayout.LayoutParams(-1, -2))
         toggle.setOnCheckedChangeListener { _, checked ->
             toggle.isEnabled = false
-            val next = state.receiveFrom.toMutableSet().apply { if (checked) add(device.id) else remove(device.id) }
-            runNetwork({ SyncEngine.saveRoutes(this, next) }, { deviceState = it; render() }, {
+            runNetwork({
+                SyncEngine.saveRoutes(this) { latest ->
+                    if (checked) latest.receiveFrom + device.id else latest.receiveFrom - device.id
+                }
+            }, { render() }, {
                 // Rebuilding from the last confirmed state restores the switch without another PUT.
                 render(); showError(it)
             })
@@ -257,8 +280,7 @@ class SyncSettingsActivity : Activity() {
 
     private fun refreshDevices() {
         if (busy) return
-        runNetwork({ SyncEngine.getDeviceState(this).also { SyncRealtimeService.update(this) } }, {
-            deviceState = it
+        runNetwork({ SyncEngine.getDeviceState(this) }, {
             render()
         })
     }
@@ -271,7 +293,6 @@ class SyncSettingsActivity : Activity() {
         setControlsEnabled(content, false)
         SyncEngine.executor.execute {
             val outcome = runCatching(work)
-            outcome.exceptionOrNull()?.let { SyncConfig(this).recordError(it.message ?: it.javaClass.simpleName) }
             main.post {
                 if (isFinishing || isDestroyed) return@post
                 busy = false
@@ -291,15 +312,24 @@ class SyncSettingsActivity : Activity() {
     }
 
     private fun updateStatus() {
-        val config = SyncConfig(this)
         statusText?.apply {
-            text = if (SyncRealtimeService.connected) "● 实时连接中" else "● 已断开"
-            if (config.lastError.isNotBlank()) append("\n上次错误：${config.lastError}")
-            setTextColor(if (SyncRealtimeService.connected) palette.accentText else palette.textSecondary)
+            val connected = SyncRealtimeService.connected
+            val error = SyncConfig(this@SyncSettingsActivity).lastError
+            text = when {
+                connected -> "● 实时接收已连接"
+                error.isNotBlank() -> "● 实时接收重连中"
+                else -> "● 正在连接实时接收"
+            }
+            if (error.isNotBlank()) append("\n同步错误：$error")
+            setTextColor(if (connected) palette.accentText else palette.textSecondary)
         }
     }
 
     private fun showError(error: Throwable) {
+        if (statusText != null) {
+            updateStatus()
+            return
+        }
         errorText.text = error.message ?: error.javaClass.simpleName
         errorText.visibility = View.VISIBLE
     }
