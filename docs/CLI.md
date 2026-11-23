@@ -74,3 +74,20 @@ System-level helpers are also available:
 If exactly one authorized Android device is connected, `--serial` may be omitted. Otherwise specify it explicitly or set `ANDROID_SERIAL`.
 
 The exported CLI receiver requires Android's signature-level `DUMP` permission, which the ADB shell holds. Ordinary third-party applications cannot invoke it.
+
+## Receive-only SMS cloud sync
+
+Use the protected receiver directly for the sync commands (all results use the existing `ok`/`command` JSON format):
+
+```bash
+adb -s DEVICE_SERIAL shell am broadcast -a io.github.venompool888.fluidcapsule.CLI -n io.github.venompool888.fluidcapsule/.cli.FluidCapsuleCliReceiver --es command sync-connect --es server https://sync.example.com --es code ABCD-EFGH
+# Alternatively replace --es code ... with --es username ACCOUNT --es password PASSWORD.
+adb -s DEVICE_SERIAL shell am broadcast -a io.github.venompool888.fluidcapsule.CLI -n io.github.venompool888.fluidcapsule/.cli.FluidCapsuleCliReceiver --es command sync-receive-all
+adb -s DEVICE_SERIAL shell am broadcast -a io.github.venompool888.fluidcapsule.CLI -n io.github.venompool888.fluidcapsule/.cli.FluidCapsuleCliReceiver --es command sync-pull
+adb -s DEVICE_SERIAL shell am broadcast -a io.github.venompool888.fluidcapsule.CLI -n io.github.venompool888.fluidcapsule/.cli.FluidCapsuleCliReceiver --es command sync-status
+adb -s DEVICE_SERIAL shell am broadcast -a io.github.venompool888.fluidcapsule.CLI -n io.github.venompool888.fluidcapsule/.cli.FluidCapsuleCliReceiver --es command sync-disconnect
+```
+
+`sync-status` reports locally cached connection/account/device/receiveFrom names and IDs, `realtimeConnected`, and the persistent `lastError`; it never exposes the token. `sync-pull` also reports `published`.
+`sync-receive-all` clears `pushTo` and selects every other registered device. Only incoming SMS produce capsules; sent messages and remote send commands are acknowledged without execution.
+Non-loopback HTTP requires the one-time warning to be accepted for that server in the settings screen before CLI connection. Debug permits cleartext only to `127.0.0.1` and `localhost`; release network policy is unchanged.

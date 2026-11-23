@@ -11,6 +11,7 @@ class BootReceiver : BroadcastReceiver() {
         ) {
             return
         }
+        io.github.venompool888.fluidcapsule.sync.SyncRealtimeService.update(context)
         val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
         if (!prefs.getBoolean("keep_alive_enabled", false)) return
 

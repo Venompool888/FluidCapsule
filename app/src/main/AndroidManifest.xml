@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -41,6 +43,16 @@
             android:name=".settings.AppRuleActivity"
             android:exported="false"
             android:label="应用专属规则" />
+
+        <activity
+            android:name=".sync.SyncSettingsActivity"
+            android:exported="false"
+            android:label="短信云同步" />
+
+        <service
+            android:name=".sync.SyncRealtimeService"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
 
         <service
             android:name=".notification.CapsuleNotificationListenerService"

@@ -1,0 +1,71 @@
+package io.github.venompool888.fluidcapsule.sync
+
+import android.content.Context
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URI
+
+class SyncApi(private val server: String, private val token: String, private val versionName: String) {
+    fun get(path: String): JSONObject = request("GET", path)
+    fun post(path: String, body: JSONObject): JSONObject = request("POST", path, body)
+    fun put(path: String, body: JSONObject): JSONObject = request("PUT", path, body)
+    fun waitForMessages(): Boolean = request("GET", "/api/v1/messages/wait?timeout=25", readTimeoutMs = 35_000)
+        .optBoolean("available", false)
+
+    private fun request(method: String, path: String, body: JSONObject? = null, readTimeoutMs: Int = 20_000): JSONObject {
+        val connection = URI(server + path).toURL().openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 15_000
+            connection.readTimeout = readTimeoutMs
+            connection.instanceFollowRedirects = false
+            connection.requestMethod = method
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("User-Agent", "FluidCapsule-Android/$versionName")
+            if (token.isNotBlank()) connection.setRequestProperty("Authorization", "Bearer $token")
+            if (body != null) writeBody(connection, body)
+            val status = connection.responseCode
+            val stream = if (status >= 400) connection.errorStream else connection.inputStream
+            val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (status !in 200..299) {
+                val message = runCatching { JSONObject(response).optString("message") }.getOrNull()
+                    ?.takeIf { it.isNotBlank() } ?: "服务器返回 $status"
+                throw ApiException(status, message)
+            }
+            return if (response.isBlank()) JSONObject() else JSONObject(response)
+        } finally { connection.disconnect() }
+    }
+
+    private fun writeBody(connection: HttpURLConnection, body: JSONObject) {
+        val encoded = body.toString().toByteArray(Charsets.UTF_8)
+        connection.doOutput = true
+        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        connection.setFixedLengthStreamingMode(encoded.size)
+        connection.outputStream.use { it.write(encoded) }
+    }
+
+    class ApiException(val status: Int, message: String) : Exception(message)
+
+    companion object {
+        fun normalizeServer(raw: String): String {
+            val server = raw.trim().trimEnd('/')
+            try {
+                val uri = URI.create(server)
+                require(uri.scheme.equals("https", true) || uri.scheme.equals("http", true))
+                require(uri.host != null && uri.rawUserInfo == null && uri.rawQuery == null && uri.rawFragment == null)
+                return server
+            } catch (error: IllegalArgumentException) {
+                throw IllegalArgumentException("服务器地址必须是完整的 HTTP(S) 地址", error)
+            }
+        }
+
+        fun needsHttpConfirmation(server: String): Boolean = URI(server).let {
+            it.scheme.equals("http", true) && !it.host.equals("localhost", true) && it.host != "127.0.0.1"
+        }
+
+        fun forConfig(context: Context, config: SyncConfig): SyncApi =
+            SyncApi(config.server, config.token(), context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty())
+
+        fun forConnect(context: Context, server: String): SyncApi =
+            SyncApi(server, "", context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty())
+    }
+}
