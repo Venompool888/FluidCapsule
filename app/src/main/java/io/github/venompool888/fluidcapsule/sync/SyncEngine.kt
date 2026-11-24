@@ -31,6 +31,10 @@ internal fun <T> runSyncAttempt(
     return attemptResult
 }
 
+/** Reports a skipped message both to the current attempt and to the persistent skip record. */
+internal fun skipReporter(recordSkipped: (String) -> Unit, reportMessageError: (String) -> Unit): (String) -> Unit =
+    { message -> recordSkipped(message); reportMessageError(message) }
+
 object SyncEngine {
     // UI, CLI and service pulls share one queue; the blocking long-poll has its own service thread.
     val executor = Executors.newSingleThreadExecutor()
@@ -90,7 +94,8 @@ object SyncEngine {
         val config = SyncConfig(context)
         return try {
             runSyncAttempt(config::recordError) { reportMessageError ->
-                pullMessages(context, config, connectedApi(context, config), reportMessageError)
+                pullMessages(context, config, connectedApi(context, config),
+                    skipReporter({ config.recordSkipped(it) }, reportMessageError))
             }.also { Log.d(SYNC_LOG_TAG, "pull success published=$it") }
         } catch (error: Exception) {
             Log.w(SYNC_LOG_TAG, "pull failure type=${error.javaClass.simpleName}")
@@ -168,6 +173,7 @@ object SyncEngine {
             .put("server", config.server).put("deviceId", config.deviceId)
             .put("receiveFrom", JSONArray(names)).put("receiveFromIds", JSONArray(receiveFrom.toList()))
             .put("realtimeConnected", connected && SyncRealtimeService.connected).put("lastError", config.lastError)
+            .put("lastSkipped", config.lastSkipped).put("lastSkippedAt", config.lastSkippedAt)
     }
 
     fun parseState(json: JSONObject): SyncDeviceState {

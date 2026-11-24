@@ -88,6 +88,6 @@ adb -s DEVICE_SERIAL shell am broadcast -a io.github.venompool888.fluidcapsule.C
 adb -s DEVICE_SERIAL shell am broadcast -a io.github.venompool888.fluidcapsule.CLI -n io.github.venompool888.fluidcapsule/.cli.FluidCapsuleCliReceiver --es command sync-disconnect
 ```
 
-`sync-status` reports locally cached connection/account/device/receiveFrom names and IDs, `realtimeConnected`, and `lastError` from the latest sync failure. The device token stays private. A clean connect or pull clears `lastError`. `sync-pull` refreshes the cached route and device state and reports `published`.
+`sync-status` reports locally cached connection/account/device/receiveFrom names and IDs, `realtimeConnected`, and `lastError` from the latest sync failure. The device token stays private. A clean connect or pull clears `lastError`. `lastSkipped` (with `lastSkippedAt`, epoch ms) keeps the latest message that was acknowledged without a capsule because it could not be decrypted or parsed; clean pulls do not clear it, disconnect does. `sync-pull` refreshes the cached route and device state and reports `published`.
 `sync-receive-all` clears `pushTo` and selects every other registered device. Only incoming SMS produce capsules; sent messages and remote send commands are acknowledged without execution.
 Non-loopback HTTP requires the one-time warning to be accepted for that server in the settings screen before CLI connection. Debug permits cleartext only to `127.0.0.1` and `localhost`; release network policy is unchanged.

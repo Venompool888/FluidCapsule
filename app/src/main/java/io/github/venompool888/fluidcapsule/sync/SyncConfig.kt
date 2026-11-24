@@ -18,6 +18,10 @@ class SyncConfig(context: Context) {
     val deviceId: String get() = prefs.getString("device_id", "").orEmpty()
     val account: String get() = prefs.getString("account", "").orEmpty()
     val lastError: String get() = prefs.getString("last_error", "").orEmpty()
+    // Skipped messages are acknowledged and gone from the server, so keep the latest diagnostic
+    // until disconnect instead of letting the next clean pull erase it like lastError.
+    val lastSkipped: String get() = prefs.getString("last_skipped", "").orEmpty()
+    val lastSkippedAt: Long get() = prefs.getLong("last_skipped_at", 0L)
     val receiveFrom: Set<String> get() = prefs.getStringSet("receive_from", emptySet()).orEmpty().toSet()
     val cachedState: String get() = prefs.getString("state", "").orEmpty()
     val isConnected: Boolean get() = server.isNotBlank() && deviceId.isNotBlank() && token().isNotBlank()
@@ -60,6 +64,10 @@ class SyncConfig(context: Context) {
     fun approveHttp(server: String) { httpApprovals.edit().putBoolean(server, true).apply() }
 
     fun recordError(message: String?) { prefs.edit().putString("last_error", message).apply() }
+
+    fun recordSkipped(message: String, at: Long = System.currentTimeMillis()) {
+        prefs.edit().putString("last_skipped", message).putLong("last_skipped_at", at).apply()
+    }
 
     fun recordRealtimeError(deviceId: String, message: String) {
         synchronized(connectionLock) {

@@ -250,6 +250,9 @@ class MainActivity : Activity() {
         refreshStatus()
         if (currentPage == Page.HISTORY) refreshHistory()
         if (rulePrefs.subscriptionEnabled) checkRuleUpdates(false)
+        // A force-stop kills the realtime loop and nothing restarts it until boot; opening the
+        // app (allowed to start a foreground service) brings it back.
+        io.github.venompool888.fluidcapsule.sync.SyncRealtimeService.update(this)
     }
 
     override fun onDestroy() {

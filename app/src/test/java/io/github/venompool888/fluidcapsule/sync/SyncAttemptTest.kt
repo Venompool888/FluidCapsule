@@ -64,4 +64,19 @@ class SyncAttemptTest {
         runSyncAttempt(recordError) { 0 }
         assertNull(lastError)
     }
+
+    @Test fun skippedMessageOutlivesTheNextCleanPull() {
+        var lastError: String? = null
+        var lastSkipped = ""
+        val recordError: (String?) -> Unit = { lastError = it }
+
+        runSyncAttempt(recordError) { reportMessageError ->
+            skipReporter({ lastSkipped = it }, reportMessageError)("message e1 could not be decrypted")
+        }
+        assertEquals("message e1 could not be decrypted", lastError)
+
+        runSyncAttempt(recordError) { 0 }
+        assertNull(lastError)
+        assertEquals("message e1 could not be decrypted", lastSkipped)
+    }
 }

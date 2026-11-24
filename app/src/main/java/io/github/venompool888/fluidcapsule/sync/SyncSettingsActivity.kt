@@ -314,13 +314,16 @@ class SyncSettingsActivity : Activity() {
     private fun updateStatus() {
         statusText?.apply {
             val connected = SyncRealtimeService.connected
-            val error = SyncConfig(this@SyncSettingsActivity).lastError
+            val config = SyncConfig(this@SyncSettingsActivity)
+            val error = config.lastError
+            val skipped = config.lastSkipped
             text = when {
                 connected -> "● 实时接收已连接"
                 error.isNotBlank() -> "● 实时接收重连中"
                 else -> "● 正在连接实时接收"
             }
             if (error.isNotBlank()) append("\n同步错误：$error")
+            if (skipped.isNotBlank()) append("\n最近跳过：$skipped")
             setTextColor(if (connected) palette.accentText else palette.textSecondary)
         }
     }
