@@ -31,6 +31,21 @@ internal fun <T> runSyncAttempt(
     return attemptResult
 }
 
+/** The server no longer accepts this device's token (revoked, or the account was disabled). */
+internal fun isRevokedToken(error: Throwable): Boolean {
+    val cause = (error as? java.util.concurrent.ExecutionException)?.cause ?: error
+    return cause is SyncApi.ApiException && (cause.status == 401 || cause.status == 403)
+}
+
+/** Local AndroidKeyStore or I/O trouble, as opposed to a bad envelope. */
+internal fun isTransientDecryptFailure(error: Throwable): Boolean =
+    error is java.security.KeyStoreException || error is java.security.UnrecoverableKeyException ||
+        error is java.security.ProviderException || error is java.io.IOException
+
+/** org.json error messages quote the input, which after decryption is SMS text. */
+internal fun decryptFailureReason(error: Throwable): String =
+    if (error is JSONException) "内容格式无效" else error.message ?: error.javaClass.simpleName
+
 /** Reports a skipped message both to the current attempt and to the persistent skip record. */
 internal fun skipReporter(recordSkipped: (String) -> Unit, reportMessageError: (String) -> Unit): (String) -> Unit =
     { message -> recordSkipped(message); reportMessageError(message) }
@@ -123,7 +138,8 @@ object SyncEngine {
                     try {
                         if (SyncedSmsPublisher.publish(context, eventId, source.name, payload)) published++
                     } catch (error: JSONException) {
-                        reportMessageError("消息 $eventId 内容无效：${error.message}")
+                        // org.json error messages quote the input, which is SMS text.
+                        reportMessageError("消息 $eventId 内容无效：格式错误")
                     } catch (error: IllegalArgumentException) {
                         reportMessageError("消息 $eventId 内容无效：${error.message}")
                     }
@@ -141,8 +157,10 @@ object SyncEngine {
         if (source == null || source.publicKey.isBlank()) throw SecurityException("找不到发送设备的公钥")
         SyncCrypto.decrypt(message.getString("eventId"), config.deviceId, source.publicKey, message.getJSONObject("envelope"))
     } catch (error: Exception) {
+        // A local keystore hiccup is retried; it says nothing about the envelope.
+        if (isTransientDecryptFailure(error)) throw error
         // A poisoned envelope must not block the queue. Keep its diagnostic after acknowledging it.
-        reportMessageError("消息 ${message.optString("eventId")} 解密失败：${error.message ?: error.javaClass.simpleName}")
+        reportMessageError("消息 ${message.optString("eventId")} 解密失败：${decryptFailureReason(error)}")
         null
     }
 

@@ -1,6 +1,8 @@
 package io.github.venompool888.fluidcapsule.sync
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
@@ -78,5 +80,21 @@ class SyncAttemptTest {
         runSyncAttempt(recordError) { 0 }
         assertNull(lastError)
         assertEquals("message e1 could not be decrypted", lastSkipped)
+    }
+
+    @Test fun keystoreTroubleIsRetriedAndJsonErrorsDoNotQuoteTheMessage() {
+        assertTrue(isTransientDecryptFailure(java.security.ProviderException("keystore busy")))
+        assertTrue(isTransientDecryptFailure(java.security.KeyStoreException("locked")))
+        assertFalse(isTransientDecryptFailure(javax.crypto.AEADBadTagException("tag mismatch")))
+        assertFalse(isTransientDecryptFailure(SecurityException("sender key mismatch")))
+        assertEquals("内容格式无效", decryptFailureReason(org.json.JSONException("Value secret text of type java.lang.String")))
+        assertEquals("tag mismatch", decryptFailureReason(javax.crypto.AEADBadTagException("tag mismatch")))
+    }
+
+    @Test fun onlyUnauthorizedResponsesCountAsRevoked() {
+        assertTrue(isRevokedToken(SyncApi.ApiException(401, "unauthorized")))
+        assertTrue(isRevokedToken(java.util.concurrent.ExecutionException(SyncApi.ApiException(403, "revoked"))))
+        assertFalse(isRevokedToken(SyncApi.ApiException(503, "unavailable")))
+        assertFalse(isRevokedToken(IOException("connection refused")))
     }
 }

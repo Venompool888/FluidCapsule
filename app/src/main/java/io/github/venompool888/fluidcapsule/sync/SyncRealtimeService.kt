@@ -27,17 +27,26 @@ class SyncRealtimeService : Service() {
     private val running = AtomicBoolean(false)
     private val realtimeStateLock = Any()
     @Volatile private var realtimeConnected = false
+    private var startRefused = false
 
     override fun onCreate() {
         super.onCreate()
         activeService = this
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "短信云同步", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
-        startForeground(NOTIFICATION_ID, notification("短信云同步连接中"))
+        try {
+            startForeground(NOTIFICATION_ID, notification("短信云同步连接中"))
+        } catch (error: IllegalStateException) {
+            // Android 12+ refuses foreground starts from the background (e.g. a sticky restart).
+            // Stop instead of crashing the process; opening the app or a reboot starts it again.
+            Log.w(SYNC_LOG_TAG, "foreground start refused type=${error.javaClass.simpleName}")
+            startRefused = true
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!shouldRun(this)) {
+        if (startRefused || !shouldRun(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -67,6 +76,12 @@ class SyncRealtimeService : Service() {
                     break
                 } catch (error: Exception) {
                     if (!isCurrentConnection(config, deviceId)) break
+                    if (isRevokedToken(error)) {
+                        // Retrying a revoked token forever only drains the battery.
+                        Log.w(SYNC_LOG_TAG, "device token rejected, stopping")
+                        config.recordRealtimeError(deviceId, "此设备已被服务器撤销或令牌失效，请断开后重新连接")
+                        break
+                    }
                     Log.d(SYNC_LOG_TAG, "retry delay ${retryMs}ms")
                     if (!pauseBeforeRetry(retryMs)) break
                     retryMs = (retryMs * 2).coerceAtMost(60_000L)
@@ -178,7 +193,17 @@ class SyncRealtimeService : Service() {
 
         fun update(context: Context) {
             val intent = Intent(context, SyncRealtimeService::class.java)
-            if (shouldRun(context)) context.startForegroundService(intent) else context.stopService(intent)
+            if (!shouldRun(context)) {
+                context.stopService(intent)
+                return
+            }
+            try {
+                context.startForegroundService(intent)
+            } catch (error: IllegalStateException) {
+                // Refused from the background on Android 12+. The connection or route change that
+                // got us here still succeeded; realtime resumes when the app is next opened.
+                Log.w(SYNC_LOG_TAG, "realtime start refused type=${error.javaClass.simpleName}")
+            }
         }
     }
 }

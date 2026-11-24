@@ -23,6 +23,7 @@ data class SyncedSmsDisplay(
     val otpTtlOverride: Int = 0,
     val plainTtlMinutes: Int = 5,
     val priority: Int = 0,
+    val showContent: Boolean = true,
 )
 
 object SyncedSmsPublisher {
@@ -30,7 +31,8 @@ object SyncedSmsPublisher {
         val appRule = AppRuleStore.get(context, context.packageName)
         val display = SyncedSmsDisplay(context.packageName, sourceName, System.currentTimeMillis(),
             UserSettings.showOtpDirectly(context), appRule.ttlMinutes,
-            AppRuleStore.effectiveTtlMinutes(context, context.packageName), appRule.priority)
+            AppRuleStore.effectiveTtlMinutes(context, context.packageName), appRule.priority,
+            AppRuleStore.showContent(context, context.packageName))
         val event = capsule(eventId, payload, RuleRuntime.current(context), display) ?: return false
         PublisherRouter.publish(context, event)
         return true
@@ -56,7 +58,13 @@ object SyncedSmsPublisher {
             shortText = otp?.code ?: body,
             body = if (otp != null) otp.validForMinutes?.let { "$it 分钟内有效 · 点击复制" } ?: "点击复制" else body,
             action = otp?.let { CapsuleAction.CopySensitiveText(it.code) } ?: CapsuleAction.None,
-            privacy = if (otp != null && !display.showOtpDirectly) CapsulePrivacy.HIDE_SENSITIVE else CapsulePrivacy.SHOW_FULL,
+            // Same privacy as notifications from whitelisted apps: OTPs follow "show code directly",
+            // other SMS follow the content setting.
+            privacy = when {
+                otp != null -> if (display.showOtpDirectly) CapsulePrivacy.SHOW_FULL else CapsulePrivacy.HIDE_SENSITIVE
+                display.showContent -> CapsulePrivacy.SHOW_FULL
+                else -> CapsulePrivacy.HIDE_SENSITIVE
+            },
             createdAtMillis = display.now,
             expiresAtMillis = display.now + ttl * 60_000L,
             dedupeKey = otp?.let { "sms-otp:${it.code}" } ?: "sync:$eventId",

@@ -66,4 +66,12 @@ class SyncedSmsPublisherTest {
     }
 
     private fun JSONObject.removeType(): JSONObject = apply { remove("type") }
+
+    @Test fun ordinarySmsFollowsTheContentSettingButOtpDoesNot() {
+        val hidden = display.copy(showContent = false)
+        assertEquals(CapsulePrivacy.HIDE_SENSITIVE,
+            SyncedSmsPublisher.capsule("source:130", sms("下午见面"), RulePack.EMPTY, hidden)!!.privacy)
+        assertEquals(CapsulePrivacy.SHOW_FULL, SyncedSmsPublisher.capsule("source:131",
+            sms("Your verification code is 482913"), RulePack.EMPTY, hidden.copy(showOtpDirectly = true))!!.privacy)
+    }
 }
