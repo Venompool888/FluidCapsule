@@ -1,6 +1,7 @@
 package io.github.venompool888.fluidcapsule.sync
 
 import android.content.Context
+import android.security.NetworkSecurityPolicy
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URI
@@ -51,20 +52,28 @@ class SyncApi(private val server: String, private val token: String, private val
     class ApiException(val status: Int, message: String) : Exception(message)
 
     companion object {
-        fun normalizeServer(raw: String): String {
+        /**
+         * Validates a server address. Plain HTTP is accepted only where the network security
+         * config permits cleartext (debug builds allow loopback for the dev server); anywhere
+         * else the request would fail at connect time, so it is rejected here with a clear reason.
+         */
+        fun normalizeServer(
+            raw: String,
+            cleartextPermitted: (String) -> Boolean = { NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted(it) },
+        ): String {
             val server = raw.trim().trimEnd('/')
-            try {
-                val uri = URI.create(server)
-                require(uri.scheme.equals("https", true) || uri.scheme.equals("http", true))
-                require(uri.host != null && uri.rawUserInfo == null && uri.rawQuery == null && uri.rawFragment == null)
-                return server
+            val uri = try {
+                URI.create(server).also {
+                    require(it.scheme.equals("https", true) || it.scheme.equals("http", true))
+                    require(it.host != null && it.rawUserInfo == null && it.rawQuery == null && it.rawFragment == null)
+                }
             } catch (error: IllegalArgumentException) {
                 throw IllegalArgumentException("服务器地址必须是完整的 HTTP(S) 地址", error)
             }
-        }
-
-        fun needsHttpConfirmation(server: String): Boolean = URI(server).let {
-            it.scheme.equals("http", true) && !it.host.equals("localhost", true) && it.host != "127.0.0.1"
+            require(!uri.scheme.equals("http", true) || cleartextPermitted(uri.host)) {
+                "这个地址使用未加密的 HTTP。为保护注册码和密码，请使用 HTTPS 地址。"
+            }
+            return server
         }
 
         fun forConfig(context: Context, config: SyncConfig): SyncApi =

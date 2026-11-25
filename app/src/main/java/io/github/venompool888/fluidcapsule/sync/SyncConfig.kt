@@ -12,7 +12,6 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 class SyncConfig(context: Context) {
-    private val httpApprovals = context.getSharedPreferences("sms_sync_http_approvals", Context.MODE_PRIVATE)
     private val prefs = context.getSharedPreferences("sms_sync", Context.MODE_PRIVATE)
     val server: String get() = prefs.getString("server", "").orEmpty()
     val deviceId: String get() = prefs.getString("device_id", "").orEmpty()
@@ -60,8 +59,6 @@ class SyncConfig(context: Context) {
         prefs.edit().putString("state", json.toString()).putStringSet("receive_from", state.receiveFrom).apply()
     }
 
-    fun requiresHttpApproval(server: String): Boolean = SyncApi.needsHttpConfirmation(server) && !httpApprovals.getBoolean(server, false)
-    fun approveHttp(server: String) { httpApprovals.edit().putBoolean(server, true).apply() }
 
     fun recordError(message: String?) { prefs.edit().putString("last_error", message).apply() }
 
