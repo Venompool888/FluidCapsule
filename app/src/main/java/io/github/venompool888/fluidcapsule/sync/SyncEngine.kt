@@ -10,7 +10,21 @@ import org.json.JSONObject
 import java.util.Locale
 import java.util.concurrent.Executors
 
-data class SyncDevice(val id: String, val name: String, val platform: String, val publicKey: String, val lastSeenAt: Long)
+/** FluidCapsule's own platform. The server never routes SMS from it, because it only receives. */
+const val RECEIVE_ONLY_PLATFORM = "fluidcapsule-android"
+
+data class SyncDevice(val id: String, val name: String, val platform: String, val publicKey: String, val lastSeenAt: Long) {
+    /** Whether this device can send SMS here; receive-only devices are dropped from routes by the server. */
+    val canSend: Boolean get() = platform != RECEIVE_ONLY_PLATFORM
+
+    /** A readable platform, e.g. "胶囊短信 · Android 17" for Capsule SMS's "android-17". */
+    val platformLabel: String get() = when {
+        platform.isBlank() -> "未知平台"
+        platform.startsWith("android-") -> platform.removePrefix("android-").trim()
+            .let { if (it.isEmpty()) "胶囊短信 · Android" else "胶囊短信 · Android $it" }
+        else -> platform
+    }
+}
 data class SyncDeviceState(val currentDeviceId: String, val account: String, val devices: List<SyncDevice>, val receiveFrom: Set<String>)
 data class SyncCredentials(val server: String, val code: String = "", val username: String = "", val password: String = "")
 
@@ -61,7 +75,7 @@ object SyncEngine {
             val server = SyncApi.normalizeServer(credentials.server)
             check(!config.requiresHttpApproval(server)) { "请先在短信云同步设置中确认此 HTTP 地址的明文凭据风险" }
             val body = JSONObject().put("deviceName", "FluidCapsule · ${Build.MODEL}")
-                .put("platform", "fluidcapsule-android").put("publicKey", SyncCrypto.publicKeyBase64())
+                .put("platform", RECEIVE_ONLY_PLATFORM).put("publicKey", SyncCrypto.publicKeyBase64())
             if (credentials.code.isNotBlank()) {
                 body.put("enrollmentCode", credentials.code.trim().uppercase(Locale.ROOT))
             } else {
