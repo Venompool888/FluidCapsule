@@ -254,7 +254,8 @@ class SyncSettingsActivity : Activity() {
         if (json == renderedStateJson) return
         val state = json.takeIf { it.isNotBlank() }?.let {
             val latest = SyncEngine.parseState(JSONObject(it))
-            latest.copy(devices = latest.devices.filter { device -> device.id != latest.currentDeviceId })
+            // Other FluidCapsule devices only receive, so a toggle for them would do nothing.
+            latest.copy(devices = latest.devices.filter { device -> device.id != latest.currentDeviceId && device.canSend })
         }
         val needsRender = renderedStateJson == null || renderedDeviceState != state
         renderedStateJson = json
@@ -279,7 +280,7 @@ class SyncSettingsActivity : Activity() {
         }
         val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         labels.addView(label(device.name, 16))
-        labels.addView(label("${device.platform} · ${relativeTime(device.lastSeenAt)}", 12, palette.textTertiary))
+        labels.addView(label("${device.platformLabel} · ${relativeTime(device.lastSeenAt)}", 12, palette.textTertiary))
         row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
         val toggle = Switch(this).apply {
             minHeight = dp(48)
