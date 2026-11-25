@@ -1270,7 +1270,14 @@ class MainActivity : Activity() {
             else -> "正在连接实时接收…"
         }
         syncSummaryView.text = summary
-        syncSummaryView.setTextColor(if (live) COLOR_PRIMARY_DARK else COLOR_TEXT_TERTIARY)
+        val reconnecting = config.isConnected && !live && config.lastError.isNotBlank()
+        syncSummaryView.setTextColor(
+            when {
+                live -> COLOR_PRIMARY_DARK
+                reconnecting -> palette.warning
+                else -> COLOR_TEXT_TERTIARY
+            }
+        )
         syncBadgeView.background = rounded(if (live) COLOR_PRIMARY else COLOR_CONTROL, 15f)
         syncBadgeView.setTextColor(if (live) Color.WHITE else COLOR_TEXT_SECONDARY)
         (syncBadgeView.parent as? View)?.contentDescription = "短信云同步，$summary"

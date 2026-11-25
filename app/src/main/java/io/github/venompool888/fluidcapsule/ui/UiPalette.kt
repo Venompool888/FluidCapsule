@@ -29,6 +29,10 @@ data class UiPalette(
     val quiet: Int,
     val refresh: Int,
     val ripple: Int,
+    /** A state that needs attention but recovers by itself, such as reconnecting. */
+    val warning: Int,
+    /** A failure the user may need to act on. */
+    val error: Int,
     val isDark: Boolean,
 ) {
     companion object {
@@ -54,6 +58,8 @@ data class UiPalette(
             quiet = Color.rgb(247, 249, 251),
             refresh = Color.rgb(196, 83, 10),
             ripple = Color.argb(48, 10, 145, 136),
+            warning = Color.rgb(166, 98, 0),
+            error = Color.rgb(175, 36, 36),
             isDark = false,
         )
 
@@ -77,6 +83,8 @@ data class UiPalette(
             quiet = Color.rgb(16, 25, 33),
             refresh = Color.rgb(255, 171, 92),
             ripple = Color.argb(64, 83, 215, 204),
+            warning = Color.rgb(255, 199, 110),
+            error = Color.rgb(255, 160, 154),
             isDark = true,
         )
     }
