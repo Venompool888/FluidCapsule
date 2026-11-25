@@ -189,14 +189,7 @@ class SyncSettingsActivity : Activity() {
         val normalized = runCatching { SyncApi.normalizeServer(credentials.server) }
         val server = normalized.getOrElse { showError(it); return }
         if (codeMode && credentials.code.isBlank()) { showError(IllegalArgumentException("请输入注册码")); return }
-        if (SyncConfig(this).requiresHttpApproval(server)) {
-            AlertDialog.Builder(this).setTitle("使用未加密连接？")
-                .setMessage("HTTP 不会加密注册码、账号密码和设备令牌，网络中的其他人可能读取这些凭据。")
-                .setNegativeButton("取消", null).setPositiveButton("继续连接") { _, _ ->
-                    SyncConfig(this).approveHttp(server)
-                    connect(credentials.copy(server = server), connect)
-                }.show()
-        } else connect(credentials.copy(server = server), connect)
+        connect(credentials.copy(server = server), connect)
     }
 
     private fun connect(credentials: SyncCredentials, connect: Button) {

@@ -73,7 +73,6 @@ object SyncEngine {
         return runSyncAttempt(config::recordError) {
             check(!config.isConnected) { "请先断开当前连接" }
             val server = SyncApi.normalizeServer(credentials.server)
-            check(!config.requiresHttpApproval(server)) { "请先在短信云同步设置中确认此 HTTP 地址的明文凭据风险" }
             val body = JSONObject().put("deviceName", "FluidCapsule · ${Build.MODEL}")
                 .put("platform", RECEIVE_ONLY_PLATFORM).put("publicKey", SyncCrypto.publicKeyBase64())
             if (credentials.code.isNotBlank()) {
