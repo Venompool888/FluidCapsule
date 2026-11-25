@@ -12,6 +12,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -339,14 +342,25 @@ class SyncSettingsActivity : Activity() {
             val config = SyncConfig(this@SyncSettingsActivity)
             val error = config.lastError
             val skipped = config.lastSkipped
-            text = when {
-                connected -> "● 实时接收已连接"
-                error.isNotBlank() -> "● 实时接收重连中"
-                else -> "● 正在连接实时接收"
+            // Only the dot carries the state colour: accent when live, amber while
+            // reconnecting after an error, muted while the first connection is made.
+            val (stateLabel, dotColor) = when {
+                connected -> "实时接收已连接" to palette.accentText
+                error.isNotBlank() -> "实时接收重连中" to warningColor()
+                else -> "正在连接实时接收" to palette.textTertiary
             }
-            if (error.isNotBlank()) append("\n同步错误：$error")
-            if (skipped.isNotBlank()) append("\n最近跳过：$skipped")
-            setTextColor(if (connected) palette.accentText else palette.textSecondary)
+            val status = SpannableStringBuilder()
+            status.append("●", ForegroundColorSpan(dotColor), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            status.append("  ").append(stateLabel)
+            if (error.isNotBlank()) {
+                status.append("\n同步错误：$error", ForegroundColorSpan(errorColor()), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            if (skipped.isNotBlank()) {
+                status.append("\n最近跳过：$skipped", ForegroundColorSpan(palette.textSecondary), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            text = status
+            setTextColor(palette.textPrimary)
+            contentDescription = status.toString().removePrefix("●").trim()
         }
     }
 
@@ -418,6 +432,7 @@ class SyncSettingsActivity : Activity() {
         intArrayOf(android.R.attr.selectableItemBackground),
     ).let { attrs -> attrs.getDrawable(0).also { attrs.recycle() } }
     private fun rounded(color: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(18).toFloat() }
+    private fun warningColor() = if (palette.isDark) Color.rgb(255, 199, 110) else Color.rgb(166, 98, 0)
     private fun errorColor() = if (palette.isDark) Color.rgb(255, 160, 154) else Color.rgb(175, 36, 36)
     private fun spaced() = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }
     private fun dp(size: Int): Int = (size * resources.displayMetrics.density).toInt()
