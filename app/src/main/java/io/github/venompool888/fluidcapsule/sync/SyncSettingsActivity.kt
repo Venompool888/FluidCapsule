@@ -124,7 +124,7 @@ class SyncSettingsActivity : Activity() {
         renderedStateJson = null
         renderedDeviceState = null
         errorText = label("", 14).apply {
-            setTextColor(errorColor())
+            setTextColor(palette.error)
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             visibility = View.GONE
         }
@@ -238,7 +238,7 @@ class SyncSettingsActivity : Activity() {
                 sync.text = "立即同步"; sync.isEnabled = true; showError(it)
             })
         }
-        val disconnect = button("断开连接").apply { setTextColor(errorColor()); isEnabled = !busy }
+        val disconnect = button("断开连接").apply { setTextColor(palette.error); isEnabled = !busy }
         content.addView(disconnect, spaced())
         disconnect.setOnClickListener {
             AlertDialog.Builder(this).setTitle("断开短信云同步？").setMessage("将清除本机连接设置和设备令牌。")
@@ -346,14 +346,14 @@ class SyncSettingsActivity : Activity() {
             // reconnecting after an error, muted while the first connection is made.
             val (stateLabel, dotColor) = when {
                 connected -> "实时接收已连接" to palette.accentText
-                error.isNotBlank() -> "实时接收重连中" to warningColor()
+                error.isNotBlank() -> "实时接收重连中" to palette.warning
                 else -> "正在连接实时接收" to palette.textTertiary
             }
             val status = SpannableStringBuilder()
             status.append("●", ForegroundColorSpan(dotColor), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             status.append("  ").append(stateLabel)
             if (error.isNotBlank()) {
-                status.append("\n同步错误：$error", ForegroundColorSpan(errorColor()), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                status.append("\n同步错误：$error", ForegroundColorSpan(palette.error), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
             if (skipped.isNotBlank()) {
                 status.append("\n最近跳过：$skipped", ForegroundColorSpan(palette.textSecondary), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -432,8 +432,6 @@ class SyncSettingsActivity : Activity() {
         intArrayOf(android.R.attr.selectableItemBackground),
     ).let { attrs -> attrs.getDrawable(0).also { attrs.recycle() } }
     private fun rounded(color: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(18).toFloat() }
-    private fun warningColor() = if (palette.isDark) Color.rgb(255, 199, 110) else Color.rgb(166, 98, 0)
-    private fun errorColor() = if (palette.isDark) Color.rgb(255, 160, 154) else Color.rgb(175, 36, 36)
     private fun spaced() = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }
     private fun dp(size: Int): Int = (size * resources.displayMetrics.density).toInt()
 }
