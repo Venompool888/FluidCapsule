@@ -118,6 +118,8 @@ class MainActivity : Activity() {
     private var expandedHistoryPackage: String? = null
     private val historyIconLoader = Executors.newFixedThreadPool(2)
     private val rulesExecutor = Executors.newSingleThreadExecutor()
+    /** History deletes wait their turn here instead of racing the listener's writes on the main thread. */
+    private val historyMutationExecutor = Executors.newSingleThreadExecutor()
     private lateinit var ruleGateway: RuleUpdateGateway
     private lateinit var rulePrefs: RuleSubscriptionPrefs
     private lateinit var rulesVersionView: TextView
@@ -265,6 +267,7 @@ class MainActivity : Activity() {
         if (!isChangingConfigurations) historyTransfer.close()
         historyIconLoader.shutdownNow()
         rulesExecutor.shutdownNow()
+        historyMutationExecutor.shutdown()
         ruleUpdateDialog?.dismiss()
         super.onDestroy()
     }
@@ -785,10 +788,11 @@ class MainActivity : Activity() {
                 .setNegativeButton("取消", null)
                 .setPositiveButton("清空") { _, _ ->
                     if (deferHistoryMutation()) return@setPositiveButton
-                    val deleted = NotificationHistoryStore.clear(this)
-                    expandedHistoryPackage = null
-                    refreshHistory(animate = true)
-                    toast("已删除 $deleted 条历史")
+                    mutateHistory({ NotificationHistoryStore.clear(this) }) { deleted ->
+                        expandedHistoryPackage = null
+                        refreshHistory(animate = true)
+                        toast("已删除 $deleted 条历史")
+                    }
                 }
                 .show()
         }
@@ -1052,8 +1056,9 @@ class MainActivity : Activity() {
             .setNegativeButton("取消", null)
             .setPositiveButton("删除") { _, _ ->
                 if (deferHistoryMutation()) return@setPositiveButton
-                NotificationHistoryStore.deleteEntry(this, entry.id)
-                refreshHistory(animate = true)
+                mutateHistory({ NotificationHistoryStore.deleteEntry(this, entry.id) }) {
+                    refreshHistory(animate = true)
+                }
             }
             .show()
     }
@@ -1066,10 +1071,11 @@ class MainActivity : Activity() {
             .setNegativeButton("取消", null)
             .setPositiveButton("删除") { _, _ ->
                 if (deferHistoryMutation()) return@setPositiveButton
-                val deleted = NotificationHistoryStore.deletePackage(this, sourcePackage)
-                expandedHistoryPackage = null
-                refreshHistory(animate = true)
-                toast("已删除 $deleted 条历史")
+                mutateHistory({ NotificationHistoryStore.deletePackage(this, sourcePackage) }) { deleted ->
+                    expandedHistoryPackage = null
+                    refreshHistory(animate = true)
+                    toast("已删除 $deleted 条历史")
+                }
             }
             .show()
     }
@@ -1509,13 +1515,24 @@ class MainActivity : Activity() {
                 } else {
                     HistoryRetentionPolicy(numberPicker.value, unit)
                 }
-                val deleted = NotificationHistoryStore.setRetentionPolicy(this, policy)
                 valueView.text = policy.bilingualLabel()
                 valueView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                refreshHistory(animate = deleted > 0)
-                toast("历史将${if (policy.unit == HistoryRetentionUnit.FOREVER) "永久保存" else "保留 ${policy.chineseLabel()}"}")
+                mutateHistory({ NotificationHistoryStore.setRetentionPolicy(this, policy) }) { deleted ->
+                    refreshHistory(animate = deleted > 0)
+                    toast("历史将${if (policy.unit == HistoryRetentionUnit.FOREVER) "永久保存" else "保留 ${policy.chineseLabel()}"}")
+                }
             }
             .show()
+    }
+
+    private fun <T> mutateHistory(work: () -> T, done: (T) -> Unit) {
+        historyMutationExecutor.execute {
+            val result = runCatching(work)
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                result.onSuccess(done).onFailure { toast(it.message ?: "通知历史操作失败，请稍后重试") }
+            }
+        }
     }
 
     private fun deferHistoryMutation(): Boolean {
