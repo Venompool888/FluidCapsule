@@ -136,7 +136,9 @@ class AppRuleActivity : Activity() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             setBackgroundColor(palette.page)
-            clipToPadding = false
+            // Clip at the inset padding so scrolled content never runs under the status bar,
+            // and the last button keeps its rounded edge above the navigation bar.
+            clipToPadding = true
             addView(content)
         }
         applySystemBarInsets(scroll)
