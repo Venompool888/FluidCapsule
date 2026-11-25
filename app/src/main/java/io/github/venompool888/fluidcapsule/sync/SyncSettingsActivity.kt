@@ -362,8 +362,15 @@ class SyncSettingsActivity : Activity() {
     private fun field(parent: LinearLayout, title: String, initial: String, type: Int): EditText {
         parent.addView(label(title, 14), spaced())
         return EditText(this).apply {
-            inputType = type
+            // setSingleLine replaces the transformation method, so it must come before
+            // inputType or a password would show in plain text.
             setSingleLine(true)
+            inputType = type
+            if (type and InputType.TYPE_MASK_VARIATION == InputType.TYPE_TEXT_VARIATION_PASSWORD) {
+                transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
+                setAutofillHints(View.AUTOFILL_HINT_PASSWORD)
+            }
             setText(initial)
             setTextColor(palette.textPrimary)
             setHintTextColor(palette.textTertiary)
