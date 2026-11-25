@@ -1,5 +1,6 @@
 package io.github.venompool888.fluidcapsule.sync
 
+import android.animation.LayoutTransition
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
@@ -15,6 +16,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
+import android.view.animation.DecelerateInterpolator
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -39,6 +41,7 @@ class SyncSettingsActivity : Activity() {
     private var renderedStateJson: String? = null
     private var renderedDeviceState: SyncDeviceState? = null
     private var busy = false
+    private var renderedConnected: Boolean? = null
     private var codeMode = true
     private var serverDraft = ""
     private var codeDraft = ""
@@ -93,6 +96,8 @@ class SyncSettingsActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setTypeface(typeface, Typeface.BOLD)
             contentDescription = "返回，短信云同步"
+            isFocusable = true
+            background = selectableBackground()
             setOnClickListener { finish() }
         })
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -120,11 +125,21 @@ class SyncSettingsActivity : Activity() {
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
             visibility = View.GONE
         }
-        if (SyncConfig(this).isConnected) renderConnected() else renderConnect()
+        val connected = SyncConfig(this).isConnected
+        if (connected) renderConnected() else renderConnect()
+        // Ease in only when switching between the connect form and the connected view, not on
+        // every refresh after a route change.
+        if (renderedConnected != null && renderedConnected != connected) {
+            content.alpha = 0f
+            content.translationY = dp(12).toFloat()
+            content.animate().alpha(1f).translationY(0f).setDuration(220)
+                .setInterpolator(DecelerateInterpolator()).start()
+        }
+        renderedConnected = connected
     }
 
     private fun renderConnect() {
-        val card = card()
+        val card = card().apply { layoutTransition = LayoutTransition() }
         content.addView(card, spaced())
         content.addView(errorText, spaced())
         card.addView(label("连接短信云同步", 19).apply { setTypeface(typeface, Typeface.BOLD) })
@@ -252,7 +267,13 @@ class SyncSettingsActivity : Activity() {
 
     @Suppress("DEPRECATION")
     private fun addDeviceRow(parent: LinearLayout, device: SyncDevice, state: SyncDeviceState) {
-        val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(8)) }
+        val row = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(8), 0, dp(8))
+            background = selectableBackground()
+            // The switch carries the accessible name and state; the row is just a bigger target.
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
         val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         labels.addView(label(device.name, 16))
         labels.addView(label("${device.platform} · ${relativeTime(device.lastSeenAt)}", 12, palette.textTertiary))
@@ -264,6 +285,7 @@ class SyncSettingsActivity : Activity() {
             isEnabled = !busy
         }
         row.addView(toggle)
+        row.setOnClickListener { if (toggle.isEnabled) toggle.toggle() }
         parent.addView(row, LinearLayout.LayoutParams(-1, -2))
         toggle.setOnCheckedChangeListener { _, checked ->
             toggle.isEnabled = false
@@ -385,6 +407,9 @@ class SyncSettingsActivity : Activity() {
         setTextColor(if (primary) Color.WHITE else palette.accentText)
         backgroundTintList = ColorStateList.valueOf(if (primary) palette.primary else palette.control)
     }
+    private fun selectableBackground() = obtainStyledAttributes(
+        intArrayOf(android.R.attr.selectableItemBackground),
+    ).let { attrs -> attrs.getDrawable(0).also { attrs.recycle() } }
     private fun rounded(color: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(18).toFloat() }
     private fun errorColor() = if (palette.isDark) Color.rgb(255, 160, 154) else Color.rgb(175, 36, 36)
     private fun spaced() = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }
