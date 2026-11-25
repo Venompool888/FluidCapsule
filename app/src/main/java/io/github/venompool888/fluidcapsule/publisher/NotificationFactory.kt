@@ -57,7 +57,11 @@ internal object NotificationFactory {
             Build.MANUFACTURER, Build.BRAND, Build.MODEL,
         )
         val showFull = event.privacy == CapsulePrivacy.SHOW_FULL
-        val dismissIntent = dismissPendingIntent(context, event)
+        val timeoutAfter = (event.expiresAtMillis - System.currentTimeMillis()).coerceAtLeast(1_000L)
+        // Android also sends the delete intent when the capsule times out, so it carries the
+        // timeout; the 关闭 button gets its own intent that always counts as the user's choice.
+        val deleteIntent = dismissPendingIntent(context, event, System.currentTimeMillis() + timeoutAfter)
+        val dismissIntent = dismissPendingIntent(context, event, timesOutAtMillis = null)
         val clickIntent = when (val action = event.action) {
             is CapsuleAction.CopySensitiveText -> PendingIntent.getBroadcast(
                 context,
@@ -100,7 +104,7 @@ internal object NotificationFactory {
             .setContentText(contentText)
             .setSubText(subText)
             .setContentIntent(clickIntent)
-            .setDeleteIntent(dismissIntent)
+            .setDeleteIntent(deleteIntent)
             .setCategory(
                 if (event.kind == CapsuleKind.NOTIFICATION) {
                     Notification.CATEGORY_MESSAGE
@@ -115,7 +119,7 @@ internal object NotificationFactory {
             .setOnlyAlertOnce(true)
             .setAllowSystemGeneratedContextualActions(true)
             .setShowWhen(false)
-            .setTimeoutAfter((event.expiresAtMillis - System.currentTimeMillis()).coerceAtLeast(1_000L))
+            .setTimeoutAfter(timeoutAfter)
 
         // Pixel's native template otherwise uses our launcher logo as the leading icon,
         // even when setSmallIcon points to the source app. This SystemUI hint is verified
@@ -263,13 +267,14 @@ internal object NotificationFactory {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
-    private fun dismissPendingIntent(context: Context, event: CapsuleEvent): PendingIntent {
+    private fun dismissPendingIntent(context: Context, event: CapsuleEvent, timesOutAtMillis: Long?): PendingIntent {
         val dismissIntent = Intent(context, DismissCapsuleReceiver::class.java)
             .setAction(DismissCapsuleReceiver.ACTION_DISMISS_CAPSULE)
             .putExtra(DismissCapsuleReceiver.EXTRA_EVENT_ID, event.eventId)
+        timesOutAtMillis?.let { dismissIntent.putExtra(DismissCapsuleReceiver.EXTRA_TIMES_OUT_AT, it) }
         return PendingIntent.getBroadcast(
             context,
-            "${event.eventId}:dismiss".hashCode(),
+            if (timesOutAtMillis == null) "${event.eventId}:dismiss-action".hashCode() else "${event.eventId}:dismiss".hashCode(),
             dismissIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
