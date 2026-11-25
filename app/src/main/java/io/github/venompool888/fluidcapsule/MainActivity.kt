@@ -250,6 +250,9 @@ class MainActivity : Activity() {
         refreshStatus()
         if (currentPage == Page.HISTORY) refreshHistory()
         if (rulePrefs.subscriptionEnabled) checkRuleUpdates(false)
+        // A force-stop kills the realtime loop and nothing restarts it until boot; opening the
+        // app (allowed to start a foreground service) brings it back.
+        io.github.venompool888.fluidcapsule.sync.SyncRealtimeService.update(this)
     }
 
     override fun onDestroy() {
@@ -292,6 +295,26 @@ class MainActivity : Activity() {
 
         addSectionLabel(content, "通知来源", "选择允许转换为实时通知的应用")
         content.addView(buildWhitelistManagementCard(), matchWidthWrapHeight())
+        content.addView(card().apply {
+            addView(TextView(this@MainActivity).apply {
+                text = "短信云同步"
+                textSize = 17f
+                setTextColor(COLOR_TEXT_PRIMARY)
+                setTypeface(typeface, Typeface.BOLD)
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "接收胶囊短信从其他手机推送的短信"
+                textSize = 12f
+                setTextColor(COLOR_TEXT_TERTIARY)
+                setPadding(0, dp(5), 0, dp(5))
+            })
+            minimumHeight = dp(72)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, io.github.venompool888.fluidcapsule.sync.SyncSettingsActivity::class.java))
+            }
+        }, matchWidthWrapHeight().apply { topMargin = dp(8) })
 
         addSectionLabel(content, "胶囊时长", "控制 QQ、微信等实时通知的停留时间")
         val durationCard = card()

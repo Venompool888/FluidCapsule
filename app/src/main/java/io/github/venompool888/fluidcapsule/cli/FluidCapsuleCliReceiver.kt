@@ -22,12 +22,27 @@ import io.github.venompool888.fluidcapsule.settings.HistoryRetentionUnit
 import io.github.venompool888.fluidcapsule.settings.UserSettings
 import io.github.venompool888.fluidcapsule.history.NotificationHistoryEntry
 import io.github.venompool888.fluidcapsule.history.NotificationHistoryStore
+import io.github.venompool888.fluidcapsule.sync.SyncCredentials
+import io.github.venompool888.fluidcapsule.sync.SyncEngine
 import org.json.JSONArray
 import org.json.JSONObject
 
 class FluidCapsuleCliReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val command = intent.getStringExtra(EXTRA_COMMAND)?.trim().orEmpty()
+        if (command.startsWith("sync-")) {
+            val pending = goAsync()
+            SyncEngine.executor.execute {
+                try {
+                    val response = executeSync(context, command, intent)
+                    pending.setResult(Activity.RESULT_OK, response.toString(), null)
+                } catch (error: Exception) {
+                    pending.setResult(Activity.RESULT_CANCELED,
+                        result(command).put("ok", false).put("error", error.message ?: error.javaClass.simpleName).toString(), null)
+                } finally { pending.finish() }
+            }
+            return
+        }
         runCatching { execute(context, command, intent) }
             .onSuccess { respond(Activity.RESULT_OK, it) }
             .onFailure { error ->
@@ -39,6 +54,30 @@ class FluidCapsuleCliReceiver : BroadcastReceiver() {
                         .put("error", error.message ?: error.javaClass.simpleName),
                 )
             }
+    }
+
+    private fun executeSync(context: Context, command: String, intent: Intent): JSONObject {
+        val response = result(command)
+        when (command) {
+            "sync-connect" -> SyncEngine.connect(context, SyncCredentials(
+                server = intent.getStringExtra("server").orEmpty(),
+                code = intent.getStringExtra("code").orEmpty(),
+                username = intent.getStringExtra("username").orEmpty(),
+                password = intent.getStringExtra("password").orEmpty(),
+            ))
+            "sync-receive-all" -> {
+                SyncEngine.saveRoutes(context) { state ->
+                    state.devices.filter { it.id != state.currentDeviceId }.mapTo(linkedSetOf()) { it.id }
+                }
+            }
+            "sync-pull" -> response.put("published", SyncEngine.pull(context))
+            "sync-status" -> Unit
+            "sync-disconnect" -> SyncEngine.disconnect(context)
+            else -> throw IllegalArgumentException("unknown sync command; see docs/CLI.md")
+        }
+        val status = SyncEngine.status(context)
+        status.keys().forEach { key -> response.put(key, status.get(key)) }
+        return response
     }
 
     private fun execute(context: Context, command: String, intent: Intent): JSONObject = when (command) {
