@@ -69,8 +69,10 @@ class SyncedSmsPublisherTest {
 
     @Test fun ordinarySmsFollowsTheContentSettingButOtpDoesNot() {
         val hidden = display.copy(showContent = false)
-        assertEquals(CapsulePrivacy.HIDE_SENSITIVE,
-            SyncedSmsPublisher.capsule("source:130", sms("下午见面"), RulePack.EMPTY, hidden)!!.privacy)
+        val plain = SyncedSmsPublisher.capsule("source:130", sms("下午见面"), RulePack.EMPTY, hidden)!!
+        assertEquals(CapsulePrivacy.HIDE_SENSITIVE, plain.privacy)
+        // The status-bar chip shows the sender, never the body, while content is hidden.
+        assertEquals("+614123", plain.shortText)
         assertEquals(CapsulePrivacy.SHOW_FULL, SyncedSmsPublisher.capsule("source:131",
             sms("Your verification code is 482913"), RulePack.EMPTY, hidden.copy(showOtpDirectly = true))!!.privacy)
     }

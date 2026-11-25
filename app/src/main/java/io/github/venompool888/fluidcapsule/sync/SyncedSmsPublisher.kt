@@ -55,7 +55,9 @@ object SyncedSmsPublisher {
             eventId = "sync:$eventId",
             kind = if (otp != null) CapsuleKind.OTP else CapsuleKind.NOTIFICATION,
             title = if (otp != null) OtpPresentationFormatter.format(sourceLabel, address).title else address,
-            shortText = otp?.code ?: body,
+            // The status-bar chip shows the body only when content may be shown; otherwise the
+            // sender, like whitelisted app notifications, which put their title there.
+            shortText = otp?.code ?: if (display.showContent) body else address.take(8),
             body = if (otp != null) otp.validForMinutes?.let { "$it 分钟内有效 · 点击复制" } ?: "点击复制" else body,
             action = otp?.let { CapsuleAction.CopySensitiveText(it.code) } ?: CapsuleAction.None,
             // Same privacy as notifications from whitelisted apps: OTPs follow "show code directly",
