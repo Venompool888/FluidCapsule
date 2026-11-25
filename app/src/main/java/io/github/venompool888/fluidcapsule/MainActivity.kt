@@ -88,6 +88,8 @@ class MainActivity : Activity() {
     private lateinit var notificationPermissionButton: Button
     private lateinit var whitelistCountView: TextView
     private lateinit var whitelistSummaryView: TextView
+    private lateinit var syncBadgeView: TextView
+    private lateinit var syncSummaryView: TextView
     private lateinit var homePage: View
     private lateinit var rulesPage: View
     private lateinit var historyPage: View
@@ -253,6 +255,8 @@ class MainActivity : Activity() {
         // A force-stop kills the realtime loop and nothing restarts it until boot; opening the
         // app (allowed to start a foreground service) brings it back.
         io.github.venompool888.fluidcapsule.sync.SyncRealtimeService.update(this)
+        // The loop needs a moment to (re)connect after resume; show the settled state.
+        window.decorView.postDelayed({ if (!isFinishing) refreshSyncSummary() }, 2_000L)
     }
 
     override fun onDestroy() {
@@ -295,26 +299,7 @@ class MainActivity : Activity() {
 
         addSectionLabel(content, "通知来源", "选择允许转换为实时通知的应用")
         content.addView(buildWhitelistManagementCard(), matchWidthWrapHeight())
-        content.addView(card().apply {
-            addView(TextView(this@MainActivity).apply {
-                text = "短信云同步"
-                textSize = 17f
-                setTextColor(COLOR_TEXT_PRIMARY)
-                setTypeface(typeface, Typeface.BOLD)
-            })
-            addView(TextView(this@MainActivity).apply {
-                text = "接收胶囊短信从其他手机推送的短信"
-                textSize = 12f
-                setTextColor(COLOR_TEXT_TERTIARY)
-                setPadding(0, dp(5), 0, dp(5))
-            })
-            minimumHeight = dp(72)
-            isClickable = true
-            isFocusable = true
-            setOnClickListener {
-                startActivity(Intent(this@MainActivity, io.github.venompool888.fluidcapsule.sync.SyncSettingsActivity::class.java))
-            }
-        }, matchWidthWrapHeight().apply { topMargin = dp(8) })
+        content.addView(buildSyncCard(), matchWidthWrapHeight().apply { topMargin = dp(8) })
 
         addSectionLabel(content, "胶囊时长", "控制 QQ、微信等实时通知的停留时间")
         val durationCard = card()
@@ -1218,6 +1203,79 @@ class MainActivity : Activity() {
         refreshWhitelistSummary()
     }
 
+    /** Same shape as the whitelist card, with the live sync state in place of a static blurb. */
+    private fun buildSyncCard(): View = card().apply {
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+        val row = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = RippleDrawable(
+                ColorStateList.valueOf(COLOR_RIPPLE),
+                rounded(COLOR_STATUS_FILL, 16f),
+                rounded(COLOR_SURFACE, 16f),
+            )
+        }
+        syncBadgeView = TextView(this@MainActivity).apply {
+            text = "云"
+            textSize = 19f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        row.addView(syncBadgeView, LinearLayout.LayoutParams(dp(54), dp(54)))
+        val labels = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), 0, dp(8), 0)
+        }
+        labels.addView(TextView(this@MainActivity).apply {
+            text = "短信云同步"
+            textSize = 16f
+            setTextColor(COLOR_TEXT_PRIMARY)
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        syncSummaryView = TextView(this@MainActivity).apply {
+            textSize = 12f
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setTextColor(COLOR_TEXT_TERTIARY)
+            setPadding(0, dp(3), 0, 0)
+        }
+        labels.addView(syncSummaryView)
+        row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(TextView(this@MainActivity).apply {
+            text = "设置  ›"
+            textSize = 14f
+            setTextColor(COLOR_PRIMARY_DARK)
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER_VERTICAL
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)))
+        row.setOnClickListener {
+            row.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            startActivity(Intent(this@MainActivity, io.github.venompool888.fluidcapsule.sync.SyncSettingsActivity::class.java))
+        }
+        addView(row, matchWidthWrapHeight())
+        refreshSyncSummary()
+    }
+
+    private fun refreshSyncSummary() {
+        if (!::syncBadgeView.isInitialized || !::syncSummaryView.isInitialized) return
+        val config = io.github.venompool888.fluidcapsule.sync.SyncConfig(this)
+        val live = config.isConnected && io.github.venompool888.fluidcapsule.sync.SyncRealtimeService.connected
+        val summary = when {
+            !config.isConnected -> "未连接 · 接收胶囊短信从其他手机推送的短信"
+            live -> "实时接收已连接"
+            config.lastError.isNotBlank() -> "重连中：${config.lastError}"
+            else -> "正在连接实时接收…"
+        }
+        syncSummaryView.text = summary
+        syncSummaryView.setTextColor(if (live) COLOR_PRIMARY_DARK else COLOR_TEXT_TERTIARY)
+        syncBadgeView.background = rounded(if (live) COLOR_PRIMARY else COLOR_CONTROL, 15f)
+        syncBadgeView.setTextColor(if (live) Color.WHITE else COLOR_TEXT_SECONDARY)
+        (syncBadgeView.parent as? View)?.contentDescription = "短信云同步，$summary"
+    }
+
     private fun refreshWhitelistSummary() {
         if (!::whitelistCountView.isInitialized || !::whitelistSummaryView.isInitialized) return
         val count = NotificationWhitelist.packages(this).size
@@ -1624,6 +1682,7 @@ class MainActivity : Activity() {
             "2. 授予通知发布权限"
         }
         refreshWhitelistSummary()
+        refreshSyncSummary()
 
         statusView.text = buildString {
             appendLine(statusLine("通知发布", manager.areNotificationsEnabled()))
