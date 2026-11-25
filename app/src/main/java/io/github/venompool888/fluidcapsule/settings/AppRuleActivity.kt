@@ -6,7 +6,9 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -16,6 +18,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import io.github.venompool888.fluidcapsule.ui.UiPalette
+import io.github.venompool888.fluidcapsule.ui.configureFluidSystemBars
 import io.github.venompool888.fluidcapsule.ui.withFluidThemeMode
 
 class AppRuleActivity : Activity() {
@@ -47,12 +50,20 @@ class AppRuleActivity : Activity() {
         }
         val sourceLabel = intent.getStringExtra(EXTRA_LABEL).orEmpty().ifBlank { sourcePackage }
         title = "$sourceLabel · 专属规则"
+        configureFluidSystemBars()
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(32))
-            setBackgroundColor(palette.page)
+            setPadding(dp(20), 0, dp(20), dp(32))
         }
-        content.addView(label(sourceLabel, 25f, true))
+        content.addView(label("‹  专属规则", 24f, true).apply {
+            minHeight = dp(56)
+            gravity = Gravity.CENTER_VERTICAL
+            contentDescription = "返回，专属规则"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { finish() }
+        })
+        content.addView(label(sourceLabel, 20f, true).apply { setPadding(0, dp(6), 0, 0) })
         content.addView(label(sourcePackage, 12f, false).apply { setTextColor(palette.textTertiary) })
         content.addView(label("这些设置只影响此应用；“继承”会跟随全局设置。", 13f, false).apply {
             setPadding(0, dp(7), 0, dp(18))
@@ -122,8 +133,26 @@ class AppRuleActivity : Activity() {
             }
         }, matchWrap().apply { topMargin = dp(7) })
 
-        setContentView(ScrollView(this).apply { addView(content) })
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(palette.page)
+            clipToPadding = false
+            addView(content)
+        }
+        applySystemBarInsets(scroll)
+        setContentView(scroll)
         loadRule()
+    }
+
+    /** Keeps the header clear of the status bar and the inputs clear of the keyboard. */
+    private fun applySystemBarInsets(root: View) {
+        root.setOnApplyWindowInsetsListener { target, insets ->
+            val bars = insets.getInsets(WindowInsets.Type.systemBars())
+            val ime = insets.getInsets(WindowInsets.Type.ime())
+            target.setPadding(bars.left, bars.top + dp(8), bars.right, maxOf(bars.bottom, ime.bottom))
+            insets
+        }
+        root.requestApplyInsets()
     }
 
     private fun loadRule() {
