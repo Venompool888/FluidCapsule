@@ -1,115 +1,137 @@
 package io.github.venompool888.fluidcapsule
 
-import android.app.AlertDialog
-import android.view.View
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.Switch
-import android.widget.TextView
+import android.view.KeyEvent
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import io.github.venompool888.fluidcapsule.rules.*
+import io.github.venompool888.fluidcapsule.rules.RuleCheckResult
+import io.github.venompool888.fluidcapsule.rules.RuleInstallResult
+import io.github.venompool888.fluidcapsule.rules.RuleSource
+import io.github.venompool888.fluidcapsule.rules.RuleStore
+import io.github.venompool888.fluidcapsule.rules.RuleSubscriptionPrefs
+import io.github.venompool888.fluidcapsule.rules.RuleTrust
+import io.github.venompool888.fluidcapsule.rules.RuleUpdateCoordinator
+import io.github.venompool888.fluidcapsule.rules.RuleUpdateGateway
+import io.github.venompool888.fluidcapsule.rules.RuleUpdateGatewayProvider
+import io.github.venompool888.fluidcapsule.rules.RuleUpdateStateStore
+import io.github.venompool888.fluidcapsule.rules.VerifiedManifest
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Signature
-import java.io.File
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(AndroidJUnit4::class)
 class RuleSubscriptionUiTest {
-    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    @get:Rule
+    val composeRule = createEmptyComposeRule()
+
+    private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private val context = instrumentation.targetContext
     private lateinit var fake: FakeGateway
 
-    @Before fun setup() {
+    @Before
+    fun setup() {
         context.getSharedPreferences("rule_subscription", 0).edit().clear().commit()
         fake = FakeGateway(available())
         RuleUpdateGatewayProvider.testFactory = { fake }
     }
 
-    @After fun cleanup() {
+    @After
+    fun cleanup() {
         RuleUpdateGatewayProvider.testFactory = null
         context.getSharedPreferences("rule_subscription", 0).edit().clear().commit()
     }
 
-    @Test fun rulesPageShowsDefaultOnAndBundledVersion() {
+    @Test
+    fun rulesPageShowsDefaultOnAndBundledVersion() {
         fake.offerUpdate = false
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            scenario.onActivity { activity ->
-                openRules(activity)
-                val page = field(activity, "rulesPage") as View
-                assertTrue(find(page) { it is Switch && it.contentDescription == "订阅规则更新" && it.isChecked } != null)
-                assertTrue(find(page) { it is TextView && it.text.contains("已安装规则：1") } != null)
-            }
+        ActivityScenario.launch(MainActivity::class.java).use {
+            openRulesSheet()
+            composeRule.onNodeWithContentDescription("订阅规则更新").assertIsOn()
+            composeRule.onNodeWithText("已安装规则：1", substring = true).assertIsDisplayed()
         }
     }
 
-    @Test fun availableUpdateShowsOneDialogAndLaterSuppressesRepeat() {
+    @Test
+    fun availableUpdateShowsOneDialogAndLaterSuppressesRepeat() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             await { fake.checks.get() >= 1 }
-            scenario.onActivity { activity ->
-                val dialog = field(activity, "ruleUpdateDialog") as AlertDialog?
-                assertTrue(dialog?.isShowing == true)
-                dialog!!.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
-            }
+            awaitNodeText("有新的规则更新")
+            composeRule.onNodeWithText("有新的规则更新").assertIsDisplayed()
+            composeRule.onNodeWithText("稍后").performClick()
+            awaitNodeAbsent("有新的规则更新")
             scenario.recreate()
             await { fake.checks.get() >= 2 }
-            scenario.onActivity { activity ->
-                assertNull(field(activity, "ruleUpdateDialog"))
-            }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithText("有新的规则更新").assertDoesNotExist()
             assertEquals(1, fake.dismissals.get())
         }
     }
 
-    @Test fun canceledDialogDoesNotReprompt() {
+    @Test
+    fun canceledDialogDoesNotReprompt() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             await { fake.checks.get() >= 1 }
-            scenario.onActivity { activity ->
-                (field(activity, "ruleUpdateDialog") as AlertDialog).cancel()
-            }
+            awaitNodeText("有新的规则更新")
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            awaitNodeAbsent("有新的规则更新")
             scenario.recreate()
             await { fake.checks.get() >= 2 }
-            scenario.onActivity { activity -> assertNull(field(activity, "ruleUpdateDialog")) }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithText("有新的规则更新").assertDoesNotExist()
             assertEquals(1, fake.dismissals.get())
         }
     }
 
-    @Test fun failedInstallDoesNotReprompt() {
+    @Test
+    fun failedInstallDoesNotReprompt() {
         fake.failInstall = true
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             await { fake.checks.get() >= 1 }
-            scenario.onActivity { activity ->
-                (field(activity, "ruleUpdateDialog") as AlertDialog)
-                    .getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-            }
+            awaitNodeText("立即更新")
+            composeRule.onNodeWithText("立即更新").performClick()
             await { fake.installs.get() >= 1 }
             scenario.recreate()
             await { fake.checks.get() >= 2 }
-            scenario.onActivity { activity -> assertNull(field(activity, "ruleUpdateDialog")) }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithText("有新的规则更新").assertDoesNotExist()
         }
     }
 
-    @Test fun updateTapInstallsExactlyOnce() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+    @Test
+    fun updateTapInstallsExactlyOnce() {
+        ActivityScenario.launch(MainActivity::class.java).use {
             await { fake.checks.get() >= 1 }
-            scenario.onActivity { activity ->
-                (field(activity, "ruleUpdateDialog") as AlertDialog)
-                    .getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-            }
+            awaitNodeText("立即更新")
+            composeRule.onNodeWithText("立即更新").performClick()
             await { fake.installs.get() == 1 }
             assertEquals(1, fake.installs.get())
         }
     }
 
-    @Test fun signedFixtureInstallsThroughUiAndVerifiedStore() {
+    @Test
+    fun signedFixtureInstallsThroughUiAndVerifiedStore() {
         val keys = KeyPairGenerator.getInstance("Ed25519", BouncyCastleProvider()).generateKeyPair()
         val trust = RuleTrust(keys.public)
         val pack = """{"schemaVersion":1,"version":2,"otpKeywords":[{"id":"synthetic","phrase":"Synthetic secure number"}],"otpBindings":[],"verificationRequests":[],"otpExclusions":[],"linkExclusions":[]}""".toByteArray()
@@ -134,57 +156,68 @@ class RuleSubscriptionUiTest {
             override var restoredVersion = 0
         }
         RuleUpdateGatewayProvider.testFactory = {
-            RuleUpdateCoordinator(source, trust, { store.loadLatest()?.pack?.version ?: 1 },
-                { store.install(it) }, { store.restoreBuiltIn() }, state, 38)
+            RuleUpdateCoordinator(
+                source,
+                trust,
+                { store.loadLatest()?.pack?.version ?: 1 },
+                { store.install(it) },
+                { store.restoreBuiltIn() },
+                state,
+                38,
+            )
         }
         try {
-            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            ActivityScenario.launch(MainActivity::class.java).use {
                 await { state.lastSuccessfulCheckMillis > 0 }
-                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-                scenario.onActivity { activity ->
-                    (field(activity, "ruleUpdateDialog") as AlertDialog)
-                        .getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-                }
+                awaitNodeText("立即更新")
+                composeRule.onNodeWithText("立即更新").performClick()
                 await { store.loadLatest()?.pack?.version == 2 }
                 assertEquals("Synthetic secure number", store.loadLatest()!!.pack.otpKeywords.single().phrase)
             }
-        } finally { dir.deleteRecursively() }
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
-    @Test fun subscriptionOffSkipsAutomaticButManualCheckWorks() {
+    @Test
+    fun subscriptionOffSkipsAutomaticButManualCheckWorks() {
         RuleSubscriptionPrefs(context).subscriptionEnabled = false
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(MainActivity::class.java).use {
             Thread.sleep(300)
             assertEquals(0, fake.checks.get())
-            scenario.onActivity { activity ->
-                openRules(activity)
-                val page = field(activity, "rulesPage") as View
-                (find(page) { it is Button && it.text == "检查规则更新" } as Button).performClick()
-            }
+            openRulesSheet()
+            composeRule.onNodeWithText("检查规则更新").performClick()
             await { fake.checks.get() == 1 }
             assertTrue(fake.lastForce)
         }
     }
 
-    private fun openRules(activity: MainActivity) {
-        val tab = field(activity, "rulesTab")!!
-        val root = tab.javaClass.getDeclaredField("root").apply { isAccessible = true }.get(tab) as View
-        root.performClick()
+    private fun openRulesSheet() {
+        composeRule.onNodeWithText("应用与规则").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("rule_subscription_pill").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("rule_subscription_pill").performClick()
+        awaitNodeText("订阅规则更新")
     }
 
-    private fun field(activity: MainActivity, name: String): Any? =
-        MainActivity::class.java.getDeclaredField(name).apply { isAccessible = true }.get(activity)
-
-    private fun find(root: View, predicate: (View) -> Boolean): View? {
-        if (predicate(root)) return root
-        if (root is ViewGroup) for (i in 0 until root.childCount) {
-            find(root.getChildAt(i), predicate)?.let { return it }
+    private fun awaitNodeText(text: String) {
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
         }
-        return null
+    }
+
+    private fun awaitNodeAbsent(text: String) {
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isEmpty()
+        }
     }
 
     private fun await(condition: () -> Boolean) {
-        repeat(100) { if (condition()) return; Thread.sleep(50) }
+        repeat(100) {
+            if (condition()) return
+            Thread.sleep(50)
+        }
         fail("Timed out waiting for UI state")
     }
 
@@ -204,17 +237,26 @@ class RuleSubscriptionUiTest {
         @Volatile var lastForce = false
         @Volatile var offerUpdate = true
         @Volatile var failInstall = false
+
         override fun check(force: Boolean): RuleCheckResult {
             lastForce = force
             checks.incrementAndGet()
-            return if (offerUpdate) RuleCheckResult.Available(available, dismissals.get() == 0)
-            else RuleCheckResult.UpToDate(1)
+            return if (offerUpdate) {
+                RuleCheckResult.Available(available, dismissals.get() == 0)
+            } else {
+                RuleCheckResult.UpToDate(1)
+            }
         }
+
         override fun install(available: VerifiedManifest): RuleInstallResult {
             installs.incrementAndGet()
             return if (failInstall) RuleInstallResult.Failed else RuleInstallResult.Installed(2)
         }
-        override fun dismiss(version: Int) { dismissals.incrementAndGet() }
+
+        override fun dismiss(version: Int) {
+            dismissals.incrementAndGet()
+        }
+
         override fun restoreBuiltIn() = Unit
     }
 }

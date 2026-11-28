@@ -15,6 +15,18 @@ object UserSettings {
     private const val KEY_NOTIFICATION_HISTORY_RETENTION_VALUE = "notification_history_retention_value"
     private const val KEY_NOTIFICATION_HISTORY_RETENTION_UNIT = "notification_history_retention_unit"
     private const val KEY_THEME_MODE = "theme_mode"
+    private const val KEY_DYNAMIC_COLOR_ENABLED = "dynamic_color_enabled"
+
+    fun dynamicColorEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getBoolean(KEY_DYNAMIC_COLOR_ENABLED, true)
+
+    fun setDynamicColorEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_DYNAMIC_COLOR_ENABLED, enabled)
+            .apply()
+    }
 
     fun themeMode(context: Context): ThemeMode = ThemeMode.fromStorageValue(
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

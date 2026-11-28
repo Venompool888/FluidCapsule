@@ -62,8 +62,14 @@ class SyncConfig(context: Context) {
 
     fun recordError(message: String?) { prefs.edit().putString("last_error", message).apply() }
 
+    fun clearLastError() { prefs.edit().remove("last_error").apply() }
+
     fun recordSkipped(message: String, at: Long = System.currentTimeMillis()) {
         prefs.edit().putString("last_skipped", message).putLong("last_skipped_at", at).apply()
+    }
+
+    fun clearLastSkipped() {
+        prefs.edit().remove("last_skipped").remove("last_skipped_at").apply()
     }
 
     fun recordRealtimeError(deviceId: String, message: String) {

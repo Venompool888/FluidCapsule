@@ -1,880 +1,338 @@
 package io.github.venompool888.fluidcapsule
 
 import android.Manifest
-import android.annotation.SuppressLint
-import android.app.Activity
-import android.app.AlertDialog
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
-import android.content.res.ColorStateList
-import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.RippleDrawable
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.PowerManager
-import android.provider.Settings
-import android.view.Gravity
-import android.view.HapticFeedbackConstants
-import android.view.MotionEvent
-import android.view.View
-import android.view.ViewGroup
-import android.view.ViewOutlineProvider
-import android.view.WindowInsets
-import android.view.animation.DecelerateInterpolator
-import android.view.animation.OvershootInterpolator
-import android.widget.Button
-import android.widget.BaseAdapter
-import android.widget.FrameLayout
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ListView
-import android.widget.NumberPicker
-import android.widget.ScrollView
-import android.widget.SeekBar
-import android.widget.Switch
-import android.widget.TextView
-import android.widget.Toast
-import io.github.venompool888.fluidcapsule.core.CapsuleAction
-import io.github.venompool888.fluidcapsule.core.CapsuleEvent
-import io.github.venompool888.fluidcapsule.core.CapsuleKind
-import io.github.venompool888.fluidcapsule.core.CapsulePrivacy
-import io.github.venompool888.fluidcapsule.diagnostics.DiagnosticsStore
-import io.github.venompool888.fluidcapsule.history.NotificationHistoryAppGroup
-import io.github.venompool888.fluidcapsule.history.NotificationHistoryEntry
-import io.github.venompool888.fluidcapsule.history.NotificationHistoryStore
-import io.github.venompool888.fluidcapsule.history.NotificationHistoryTransfer
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.venompool888.fluidcapsule.history.HistoryTransferAction
 import io.github.venompool888.fluidcapsule.history.HistoryTransferState
-import io.github.venompool888.fluidcapsule.keepalive.KeepAliveService
-import io.github.venompool888.fluidcapsule.notification.CapsuleNotificationListenerService
-import io.github.venompool888.fluidcapsule.publisher.PublisherRouter
-import io.github.venompool888.fluidcapsule.rules.RuleCheckResult
-import io.github.venompool888.fluidcapsule.rules.RuleInstallResult
-import io.github.venompool888.fluidcapsule.rules.RuleRuntime
-import io.github.venompool888.fluidcapsule.rules.RuleSubscriptionPrefs
-import io.github.venompool888.fluidcapsule.rules.RuleUpdateGateway
-import io.github.venompool888.fluidcapsule.rules.RuleUpdateGatewayProvider
+import io.github.venompool888.fluidcapsule.history.NotificationHistoryTransfer
 import io.github.venompool888.fluidcapsule.rules.VerifiedManifest
-import io.github.venompool888.fluidcapsule.settings.CapsuleDisplayDuration
-import io.github.venompool888.fluidcapsule.settings.HistoryRetentionPolicy
-import io.github.venompool888.fluidcapsule.settings.HistoryRetentionUnit
-import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
-import io.github.venompool888.fluidcapsule.settings.ThemeMode
-import io.github.venompool888.fluidcapsule.settings.UserSettings
-import io.github.venompool888.fluidcapsule.settings.WhitelistActivity
-import io.github.venompool888.fluidcapsule.ui.UiPalette
-import io.github.venompool888.fluidcapsule.ui.configureFluidSystemBars
-import io.github.venompool888.fluidcapsule.ui.withFluidThemeMode
+import io.github.venompool888.fluidcapsule.sync.SyncRealtimeService
+import io.github.venompool888.fluidcapsule.sync.SyncSettingsActivity
+import io.github.venompool888.fluidcapsule.ui.screens.AppsAndRulesScreen
+import io.github.venompool888.fluidcapsule.ui.screens.HistoryScreen
+import io.github.venompool888.fluidcapsule.ui.screens.OverviewScreen
+import io.github.venompool888.fluidcapsule.ui.screens.SettingsScreen
+import io.github.venompool888.fluidcapsule.ui.state.MainTab
+import io.github.venompool888.fluidcapsule.ui.state.MainViewModel
+import io.github.venompool888.fluidcapsule.ui.state.PromotionSettingsLaunchResult
+import io.github.venompool888.fluidcapsule.ui.state.SystemHealthChecker
+import io.github.venompool888.fluidcapsule.ui.theme.FluidCapsuleTheme
+import io.github.venompool888.fluidcapsule.ui.theme.configureEdgeToEdgeForTheme
+import io.github.venompool888.fluidcapsule.ui.theme.isDarkThemeForContext
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 
-class MainActivity : Activity() {
-    private val palette by lazy { UiPalette.from(this) }
-    private lateinit var statusView: TextView
-    private lateinit var notificationPermissionButton: Button
-    private lateinit var whitelistCountView: TextView
-    private lateinit var whitelistSummaryView: TextView
-    private lateinit var syncBadgeView: TextView
-    private lateinit var syncSummaryView: TextView
-    private lateinit var homePage: View
-    private lateinit var rulesPage: View
-    private lateinit var historyPage: View
-    private lateinit var backendPage: View
-    private lateinit var pageHost: FrameLayout
-    private lateinit var homeTab: NavigationTab
-    private lateinit var rulesTab: NavigationTab
-    private lateinit var historyTab: NavigationTab
-    private lateinit var backendTab: NavigationTab
-    private lateinit var historyCountView: TextView
-    private lateinit var historyEmptyView: TextView
-    private lateinit var historyListView: ListView
-    private lateinit var historyAdapter: NotificationHistoryAdapter
-    private lateinit var historySortTimeTab: TextView
-    private lateinit var historySortCountTab: TextView
-    private lateinit var historyTransfer: NotificationHistoryTransfer
-    private lateinit var historyExportButton: Button
-    private lateinit var historyImportButton: Button
-    private lateinit var historyClearButton: Button
-    private lateinit var historyTransferStatus: TextView
-    private lateinit var historyRetentionValueView: TextView
-    private var historyTransferDialog: AlertDialog? = null
-    private var historyDialogState: HistoryTransferState? = null
-    private var currentPage = Page.HOME
-    private var historySortMode = HistorySortMode.TIME
-    private var expandedHistoryPackage: String? = null
-    private val historyIconLoader = Executors.newFixedThreadPool(2)
-    private val rulesExecutor = Executors.newSingleThreadExecutor()
-    /** History deletes wait their turn here instead of racing the listener's writes on the main thread. */
-    private val historyMutationExecutor = Executors.newSingleThreadExecutor()
-    private lateinit var ruleGateway: RuleUpdateGateway
-    private lateinit var rulePrefs: RuleSubscriptionPrefs
-    private lateinit var rulesVersionView: TextView
-    private lateinit var rulesStatusView: TextView
-    private lateinit var rulesUpdateButton: Button
-    private var availableRuleManifest: VerifiedManifest? = null
-    private var ruleUpdateDialog: AlertDialog? = null
-    private var rulesCheckInFlight = false
-    private var promptedRuleVersion = 0
-    private val historyIconHandler = Handler(Looper.getMainLooper())
-    private val historyIconRequests = ConcurrentHashMap.newKeySet<String>()
-    private val historyIconCache = object : android.util.LruCache<String, Drawable>(96) {}
+class MainActivity : ComponentActivity() {
+    internal val viewModel: MainViewModel by viewModels()
+    internal val historyTransfer: NotificationHistoryTransfer
+        get() = viewModel.historyTransfer
 
-    override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(newBase.withFluidThemeMode())
+    private var pendingSnackbarMessage: ((String) -> Unit)? = null
+    private var pendingEnableKeepAliveAfterPermission = false
+
+    private val exportDocumentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if ((viewModel.historyTransfer.state as? HistoryTransferState.Picking)?.action == HistoryTransferAction.EXPORT) {
+            viewModel.historyTransfer.acceptDocument(result.data?.data.takeIf { result.resultCode == RESULT_OK })
+        }
+    }
+
+    private val importDocumentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if ((viewModel.historyTransfer.state as? HistoryTransferState.Picking)?.action == HistoryTransferAction.IMPORT) {
+            viewModel.historyTransfer.acceptDocument(result.data?.data.takeIf { result.resultCode == RESULT_OK })
+        }
+    }
+
+    private val postNotificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val shouldStartKeepAlive = pendingEnableKeepAliveAfterPermission
+        pendingEnableKeepAliveAfterPermission = false
+        viewModel.refreshHealth()
+        if (granted) {
+            if (shouldStartKeepAlive) {
+                viewModel.setKeepAliveEnabled(true)
+                showSnackbar("已授予通知权限并开启前台保活服务")
+            } else {
+                showSnackbar("已授予通知发布权限")
+            }
+        } else {
+            showSnackbar("未授予通知发布权限，部分系统需在通知设置中开启")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        historyTransfer = lastNonConfigurationInstance as? NotificationHistoryTransfer
-            ?: NotificationHistoryTransfer(this)
-        rulePrefs = RuleSubscriptionPrefs(this)
-        ruleGateway = RuleUpdateGatewayProvider.create(this)
         title = "流体胶囊"
-        configureSystemBars()
+        configureEdgeToEdgeForTheme(this, isDarkThemeForContext(this))
+        viewModel.restoreSavedState(savedInstanceState)
 
-        homePage = buildHomePage()
-        rulesPage = buildRulesPage().apply { visibility = View.GONE }
-        historyPage = buildHistoryPage().apply { visibility = View.GONE }
-        backendPage = buildBackendPage().apply { visibility = View.GONE }
-        pageHost = FrameLayout(this).apply {
-            setBackgroundColor(COLOR_PAGE)
-            addView(homePage, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ))
-            addView(historyPage, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ))
-            addView(rulesPage, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ))
-            addView(backendPage, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ))
-        }
-        val bottomNavigation = buildBottomNavigation()
-        val statusBarScrim = View(this).apply {
-            setBackgroundColor(COLOR_PAGE)
-            elevation = dp(20).toFloat()
-        }
-        val navigationBarScrim = View(this).apply {
-            setBackgroundColor(COLOR_PAGE)
-            elevation = dp(20).toFloat()
-        }
-        val root = FrameLayout(this).apply {
-            setBackgroundColor(COLOR_PAGE)
-            addView(pageHost, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ))
-            addView(bottomNavigation, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(BOTTOM_NAV_HEIGHT_DP),
-                Gravity.BOTTOM,
-            ).apply {
-                marginStart = dp(14)
-                marginEnd = dp(14)
-            })
-            addView(statusBarScrim, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                Gravity.TOP,
-            ))
-            addView(navigationBarScrim, FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                Gravity.BOTTOM,
-            ))
-        }
-        setContentView(root)
-        applySystemBarInsets(root, pageHost, bottomNavigation, statusBarScrim, navigationBarScrim)
-        pageHost.alpha = 0.72f
-        pageHost.translationY = dp(10).toFloat()
-        pageHost.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(240)
-            .setInterpolator(DecelerateInterpolator())
-            .start()
-        savedInstanceState?.getString("history.currentPage")?.let { savedPage ->
-            Page.entries.firstOrNull { it.name == savedPage }?.let(::showPage)
-        }
-        if (lastNonConfigurationInstance == null) {
-            val picker = savedInstanceState?.getString("history.picker")
-            if (picker != null) {
-                HistoryTransferAction.entries.firstOrNull { it.name == picker }?.let(historyTransfer::beginPicking)
-            } else if (savedInstanceState?.getBoolean("history.busy") == true) {
-                historyTransfer.interrupted()
+        setContent {
+            val settingsState by viewModel.settingsState.collectAsStateWithLifecycle()
+            FluidCapsuleTheme(
+                themeMode = settingsState.themeMode,
+                dynamicColor = settingsState.dynamicColorEnabled,
+            ) {
+                MainShell()
             }
         }
-        historyTransfer.attach(::renderHistoryTransfer)
     }
-
-    override fun onRetainNonConfigurationInstance(): Any = historyTransfer
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString("history.currentPage", currentPage.name)
-        outState.putString("history.picker", (historyTransfer.state as? HistoryTransferState.Picking)?.action?.name)
-        outState.putBoolean("history.busy", historyTransfer.state != HistoryTransferState.Idle)
+        viewModel.saveState(outState)
         super.onSaveInstanceState(outState)
-    }
-
-    @Deprecated("Platform document picker result callback")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        val action = when (requestCode) {
-            HISTORY_EXPORT_REQUEST -> HistoryTransferAction.EXPORT
-            HISTORY_IMPORT_REQUEST -> HistoryTransferAction.IMPORT
-            else -> return
-        }
-        if ((historyTransfer.state as? HistoryTransferState.Picking)?.action == action) {
-            historyTransfer.acceptDocument(data?.data.takeIf { resultCode == RESULT_OK })
-        }
     }
 
     override fun onResume() {
         super.onResume()
-        refreshStatus()
-        if (currentPage == Page.HISTORY) refreshHistory()
-        if (rulePrefs.subscriptionEnabled) checkRuleUpdates(false)
+        viewModel.refreshOnResume()
         // A force-stop kills the realtime loop and nothing restarts it until boot; opening the
         // app (allowed to start a foreground service) brings it back.
-        io.github.venompool888.fluidcapsule.sync.SyncRealtimeService.update(this)
+        SyncRealtimeService.update(this)
         // The loop needs a moment to (re)connect after resume; show the settled state.
-        window.decorView.postDelayed({ if (!isFinishing) refreshSyncSummary() }, 2_000L)
+        window.decorView.postDelayed({
+            if (!isFinishing && !isDestroyed) viewModel.refreshSyncSummary()
+        }, 2_000L)
     }
 
-    override fun onDestroy() {
-        historyTransfer.detach()
-        historyTransferDialog?.dismiss()
-        if (!isChangingConfigurations) historyTransfer.close()
-        historyIconLoader.shutdownNow()
-        rulesExecutor.shutdownNow()
-        historyMutationExecutor.shutdown()
-        ruleUpdateDialog?.dismiss()
-        super.onDestroy()
-    }
+    @Composable
+    private fun MainShell() {
+        val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
+        val healthState by viewModel.healthState.collectAsStateWithLifecycle()
+        val settingsState by viewModel.settingsState.collectAsStateWithLifecycle()
+        val appsState by viewModel.appsCatalog.state.collectAsStateWithLifecycle()
+        val ruleState by viewModel.ruleState.collectAsStateWithLifecycle()
+        val syncSummary by viewModel.syncSummary.collectAsStateWithLifecycle()
+        val sandboxState by viewModel.sandboxState.collectAsStateWithLifecycle()
+        val historyState by viewModel.historyState.collectAsStateWithLifecycle()
+        val transferState by viewModel.historyTransferState.collectAsStateWithLifecycle()
+        val rawDiagnostics by viewModel.rawDiagnosticsText.collectAsStateWithLifecycle()
 
-    private fun buildHomePage(): View {
-        val content = pageContent()
-        content.addView(buildHero(), matchWidthWrapHeight())
-        content.addView(buildFlowCard(), matchWidthWrapHeight().apply { topMargin = dp(14) })
-        addSectionLabel(content, "快速设置", "按顺序完成系统授权与功能测试")
-        val setupCard = card()
-        setupCard.addActionButton("1. 授予通知读取权限", ButtonTone.PRIMARY) {
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-        }
-        notificationPermissionButton = setupCard.addActionButton("2. 授予通知发布权限") {
-            requestNotificationPermissionOrOpenSettings()
-        }
-        setupCard.addActionButton("3. 发布测试验证码 482913", ButtonTone.ACCENT) {
-            publishTestOtp()
-        }
-        content.addView(setupCard, matchWidthWrapHeight().apply { bottomMargin = dp(8) })
-        addSectionLabel(content, "暗黑模式", "选择应用外观，不会修改手机的系统主题")
-        content.addView(buildThemeModeCard(), matchWidthWrapHeight().apply { bottomMargin = dp(8) })
-        return scrollPage(content)
-    }
-
-    private fun buildRulesPage(): View {
-        val content = pageContent()
-        content.addPageHeader("规则", "通知来源、显示时长与隐私")
-
-        addSectionLabel(content, "规则订阅", "只从官方 GitHub 获取已签名的识别词条")
-        content.addView(buildRuleSubscriptionCard(), matchWidthWrapHeight())
-
-        addSectionLabel(content, "通知来源", "选择允许转换为实时通知的应用")
-        content.addView(buildWhitelistManagementCard(), matchWidthWrapHeight())
-        content.addView(buildSyncCard(), matchWidthWrapHeight().apply { topMargin = dp(8) })
-
-        addSectionLabel(content, "胶囊时长", "控制 QQ、微信等实时通知的停留时间")
-        val durationCard = card()
-        durationCard.addDisplayDurationSetting()
-        content.addView(durationCard, matchWidthWrapHeight())
-
-        addSectionLabel(content, "隐私显示", "控制锁屏、胶囊和剪贴板中的敏感内容")
-        val privacyCard = card()
-        privacyCard.addSettingRow(
-            title = "直接显示验证码",
-            summary = "包含锁屏胶囊；关闭后仍可点击复制",
-            checked = UserSettings.showOtpDirectly(this),
-        ) { checked ->
-            UserSettings.setShowOtpDirectly(this, checked)
-            toast(if (checked) "将直接显示验证码" else "将隐藏验证码，点击仍可复制")
-        }
-        privacyCard.addDivider()
-        privacyCard.addSettingRow(
-            title = "隐藏剪贴板预览",
-            summary = "复制验证码时，用掩码保护系统预览",
-            checked = UserSettings.maskOtpClipboardPreview(this),
-        ) { checked ->
-            UserSettings.setMaskOtpClipboardPreview(this, checked)
-            toast(if (checked) "复制提示将打码" else "复制提示将直接显示验证码")
-        }
-        privacyCard.addDivider()
-        privacyCard.addSettingRow(
-            title = "白名单显示正文",
-            summary = "包含锁屏；适用于已信任的通知来源",
-            checked = UserSettings.showWhitelistContent(this),
-        ) { checked ->
-            UserSettings.setShowWhitelistContent(this, checked)
-            toast(if (checked) "白名单通知将直接显示正文" else "锁屏将隐藏白名单通知正文")
-        }
-        content.addView(privacyCard, matchWidthWrapHeight().apply { bottomMargin = dp(8) })
-        return scrollPage(content)
-    }
-
-    private fun buildRuleSubscriptionCard(): View = card().apply {
-        addSettingRow(
-            title = "订阅规则更新",
-            summary = "默认开启；进入流体胶囊时检查，有新版本时在应用内提示",
-            checked = rulePrefs.subscriptionEnabled,
-        ) { enabled ->
-            rulePrefs.subscriptionEnabled = enabled
-            rulesStatusView.text = if (enabled) "已开启规则订阅" else "已关闭自动检查；仍可手动检查"
-            if (enabled) checkRuleUpdates(false)
-        }
-        rulesVersionView = TextView(this@MainActivity).apply {
-            text = "已安装规则：${RuleRuntime.current(this@MainActivity).version} · 官方 GitHub"
-            textSize = 14f
-            setTextColor(COLOR_TEXT_PRIMARY)
-            setPadding(dp(5), dp(12), dp(5), dp(3))
-        }
-        addView(rulesVersionView, matchWidthWrapHeight())
-        rulesStatusView = TextView(this@MainActivity).apply {
-            text = "上次检查：尚未检查"
-            textSize = 12f
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setPadding(dp(5), dp(2), dp(5), dp(8))
-        }
-        addView(rulesStatusView, matchWidthWrapHeight())
-        addActionButton("检查规则更新", ButtonTone.PRIMARY) { checkRuleUpdates(true) }
-        rulesUpdateButton = addActionButton("更新规则") {
-            availableRuleManifest?.let(::installRuleUpdate)
-        }.apply { isEnabled = false }
-        addActionButton("恢复内置规则", ButtonTone.QUIET) { restoreBuiltInRules() }
-    }
-
-    private fun checkRuleUpdates(force: Boolean) {
-        if (rulesCheckInFlight || (!force && !rulePrefs.subscriptionEnabled)) return
-        rulesCheckInFlight = true
-        rulesStatusView.text = "正在检查规则…"
-        rulesExecutor.execute {
-            val result = runCatching { ruleGateway.check(force) }.getOrDefault(RuleCheckResult.Failed)
-            runOnUiThread {
-                rulesCheckInFlight = false
-                if (isFinishing || isDestroyed) return@runOnUiThread
-                when (result) {
-                    is RuleCheckResult.Available -> {
-                        availableRuleManifest = result.manifest
-                        rulesStatusView.text = "发现规则版本 ${result.manifest.manifest.version}"
-                        rulesUpdateButton.text = "更新到规则 ${result.manifest.manifest.version}"
-                        rulesUpdateButton.isEnabled = true
-                        if (result.shouldPrompt && rulePrefs.subscriptionEnabled && !force &&
-                            promptedRuleVersion != result.manifest.manifest.version &&
-                            ruleUpdateDialog?.isShowing != true
-                        ) showRuleUpdateDialog(result.manifest)
-                    }
-                    is RuleCheckResult.UpToDate -> {
-                        availableRuleManifest = null
-                        rulesUpdateButton.isEnabled = false
-                        rulesStatusView.text = "规则已是最新版本"
-                        rulesVersionView.text = "已安装规则：${result.version} · 官方 GitHub"
-                    }
-                    is RuleCheckResult.Incompatible -> {
-                        rulesStatusView.text = "规则 ${result.version} 需要更新的应用版本"
-                    }
-                    RuleCheckResult.Offline -> rulesStatusView.text = "离线，稍后可重试"
-                    RuleCheckResult.Failed -> rulesStatusView.text = "检查失败，请稍后重试"
-                    RuleCheckResult.Disabled -> rulesStatusView.text = "已关闭自动检查"
+        val snackbarHostState = remember { SnackbarHostState() }
+        val coroutineScope = rememberCoroutineScope()
+        val showMessage: (String) -> Unit = remember(snackbarHostState, coroutineScope) {
+            { message ->
+                coroutineScope.launch {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    snackbarHostState.showSnackbar(message)
                 }
             }
         }
-    }
+        pendingSnackbarMessage = showMessage
 
-    private fun showRuleUpdateDialog(manifest: VerifiedManifest) {
-        val version = manifest.manifest.version
-        promptedRuleVersion = version
-        // Showing the prompt consumes this version, including Back, outside tap,
-        // and an attempted update that fails. The Rules-page button stays usable.
-        ruleGateway.dismiss(version)
-        ruleUpdateDialog = AlertDialog.Builder(this)
-            .setTitle("有新的规则更新")
-            .setMessage("官方规则版本 $version 已可用。是否立即更新？")
-            .setPositiveButton("立即更新") { _, _ -> installRuleUpdate(manifest) }
-            .setNegativeButton("稍后", null)
-            .create().apply {
-                setOnDismissListener { ruleUpdateDialog = null }
-                show()
-            }
-    }
-
-    private fun installRuleUpdate(manifest: VerifiedManifest) {
-        rulesUpdateButton.isEnabled = false
-        rulesStatusView.text = "正在验证并安装规则…"
-        rulesExecutor.execute {
-            val result = runCatching { ruleGateway.install(manifest) }.getOrDefault(RuleInstallResult.Failed)
-            runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
-                when (result) {
-                    is RuleInstallResult.Installed -> {
-                        availableRuleManifest = null
-                        rulesVersionView.text = "已安装规则：${result.version} · 官方 GitHub"
-                        rulesStatusView.text = "规则已更新"
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            bottomBar = {
+                NavigationBar {
+                    MainTab.entries.forEach { tab ->
+                        val selected = currentTab == tab
+                        val icon = when (tab) {
+                            MainTab.OVERVIEW -> if (selected) Icons.Filled.Home else Icons.Outlined.Home
+                            MainTab.APPS_AND_RULES -> if (selected) Icons.Filled.Apps else Icons.Outlined.Apps
+                            MainTab.HISTORY -> if (selected) Icons.Filled.History else Icons.Outlined.History
+                            MainTab.SETTINGS -> if (selected) Icons.Filled.Settings else Icons.Outlined.Settings
+                        }
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = { viewModel.selectTab(tab) },
+                            icon = { Icon(imageVector = icon, contentDescription = null) },
+                            label = { Text(tab.label, maxLines = 1) },
+                        )
                     }
-                    RuleInstallResult.Incompatible -> rulesStatusView.text = "当前应用版本无法安装此规则"
-                    RuleInstallResult.Failed -> rulesStatusView.text = "更新失败，原有规则仍可使用"
                 }
-                rulesUpdateButton.isEnabled = result !is RuleInstallResult.Installed && availableRuleManifest != null
+            },
+        ) { innerPadding ->
+            val bottomPadding = innerPadding.calculateBottomPadding()
+            when (currentTab) {
+                MainTab.OVERVIEW -> OverviewScreen(
+                    healthState = healthState,
+                    settingsState = settingsState,
+                    appsState = appsState,
+                    historyState = historyState,
+                    ruleState = ruleState,
+                    syncSummary = syncSummary,
+                    sandboxState = sandboxState,
+                    bottomContentPadding = bottomPadding,
+                    onNavigateTab = viewModel::selectTab,
+                    onOpenSyncSettings = {
+                        startActivity(Intent(this@MainActivity, SyncSettingsActivity::class.java))
+                    },
+                    onRequestPostNotificationsOrOpenSettings = ::requestNotificationPermissionOrOpenSettings,
+                    onOpenPromotionSettings = { openPromotionSettingsSafely(showMessage) },
+                    onSelectSandboxPreset = viewModel::selectSandboxPreset,
+                    onToggleSandboxExpanded = viewModel::toggleSandboxExpanded,
+                    onCopySandboxOtp = { code ->
+                        showMessage(viewModel.copyTextToClipboard("验证码", code, sensitive = true))
+                    },
+                    onPublishTestOtp = { showMessage(viewModel.publishTestOtp()) },
+                    onPublishTestChat = { showMessage(viewModel.publishTestChat()) },
+                    onPublishTestProgress = { showMessage(viewModel.publishTestProgress()) },
+                )
+                MainTab.APPS_AND_RULES -> AppsAndRulesScreen(
+                    appsState = appsState,
+                    ruleState = ruleState,
+                    bottomContentPadding = bottomPadding,
+                    onSearchQueryChange = viewModel.appsCatalog::setSearchQuery,
+                    onFilterChange = viewModel.appsCatalog::setFilter,
+                    onToggleApp = viewModel.appsCatalog::setAppEnabled,
+                    onRefreshAndSort = viewModel.appsCatalog::refreshAndSortApps,
+                    onToggleRuleSubscription = viewModel::setRuleSubscriptionEnabled,
+                    onCheckRuleUpdates = { viewModel.checkRuleUpdates(force = true) },
+                    onInstallAvailableRule = {
+                        ruleState.availableManifest?.let(viewModel::installRuleUpdate)
+                    },
+                    onRestoreBuiltInRules = viewModel::restoreBuiltInRules,
+                )
+                MainTab.HISTORY -> HistoryScreen(
+                    historyState = historyState,
+                    transferState = transferState,
+                    bottomContentPadding = bottomPadding,
+                    onSearchQueryChange = viewModel::setHistorySearchQuery,
+                    onDecisionFilterChange = viewModel::setHistoryDecisionFilter,
+                    onSortModeChange = viewModel::setHistorySortMode,
+                    onTogglePrivacyBlur = viewModel::togglePrivacyBlur,
+                    onToggleAppGroup = viewModel::toggleAppGroupExpanded,
+                    onTogglePackageRecordHistory = { pkg, enabled ->
+                        showMessage(viewModel.setPackageRecordHistory(pkg, enabled))
+                    },
+                    onCopyOtp = { code ->
+                        showMessage(viewModel.copyTextToClipboard("验证码", code, sensitive = true))
+                    },
+                    onCopyBody = { body ->
+                        showMessage(viewModel.copyTextToClipboard("通知正文", body, sensitive = false))
+                    },
+                    onDeleteEntry = { id -> viewModel.deleteHistoryEntry(id, showMessage) },
+                    onDeletePackage = { pkg -> viewModel.deleteHistoryPackage(pkg, showMessage) },
+                    onClearAllHistory = { viewModel.clearAllHistory(showMessage) },
+                    onToggleRecording = { enabled ->
+                        showMessage(viewModel.setNotificationHistoryEnabled(enabled))
+                    },
+                    onChangeRetentionPolicy = { policy ->
+                        viewModel.setRetentionPolicy(policy, showMessage)
+                    },
+                    onExportHistory = { pickHistoryDocument(HistoryTransferAction.EXPORT, showMessage) },
+                    onImportHistory = { pickHistoryDocument(HistoryTransferAction.IMPORT, showMessage) },
+                    onBlockedActionMessage = showMessage,
+                )
+                MainTab.SETTINGS -> SettingsScreen(
+                    settingsState = settingsState,
+                    healthState = healthState,
+                    syncSummary = syncSummary,
+                    rawDiagnosticsText = rawDiagnostics,
+                    bottomContentPadding = bottomPadding,
+                    onSelectThemeMode = viewModel::setThemeMode,
+                    onToggleDynamicColor = viewModel::setDynamicColorEnabled,
+                    onCapsuleDurationChange = { minutes ->
+                        viewModel.setCapsuleDurationMinutes(minutes)
+                        showMessage("胶囊将显示 $minutes 分钟")
+                    },
+                    onToggleShowOtpDirectly = { checked ->
+                        viewModel.setShowOtpDirectly(checked)
+                        showMessage(if (checked) "将直接显示验证码" else "将隐藏验证码，点击仍可复制")
+                    },
+                    onToggleMaskClipboard = { checked ->
+                        viewModel.setMaskOtpClipboardPreview(checked)
+                        showMessage(if (checked) "复制提示将打码" else "复制提示将直接显示验证码")
+                    },
+                    onToggleShowWhitelistContent = { checked ->
+                        viewModel.setShowWhitelistContent(checked)
+                        showMessage(if (checked) "白名单通知将直接显示正文" else "锁屏将隐藏白名单通知正文")
+                    },
+                    onOpenSyncSettings = {
+                        startActivity(Intent(this@MainActivity, SyncSettingsActivity::class.java))
+                    },
+                    onToggleKeepAlive = { enabled ->
+                        handleKeepAliveToggle(enabled, showMessage)
+                    },
+                    onRequestPostNotificationsOrOpenSettings = ::requestNotificationPermissionOrOpenSettings,
+                    onOpenPromotionSettings = { openPromotionSettingsSafely(showMessage) },
+                    onRefreshDiagnostics = {
+                        viewModel.refreshHealth()
+                        viewModel.refreshSyncSummary()
+                        showMessage("诊断状态已刷新")
+                    },
+                )
             }
         }
-    }
 
-    private fun restoreBuiltInRules() {
-        rulesStatusView.text = "正在恢复内置规则…"
-        rulesExecutor.execute {
-            val success = runCatching { ruleGateway.restoreBuiltIn() }.isSuccess
-            runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
-                if (success) {
-                    availableRuleManifest = null
-                    rulesVersionView.text = "已安装规则：1 · 内置规则"
-                    rulesUpdateButton.isEnabled = false
-                }
-                rulesStatusView.text = if (success) "已恢复内置规则" else "恢复失败，请重试"
-            }
-        }
-    }
+        HistoryTransferDialogs(
+            transferState = transferState,
+            onConfirmImport = { includeExpired -> viewModel.historyTransfer.confirmImport(includeExpired) },
+            onCancelPreview = { viewModel.historyTransfer.cancelPreview() },
+            onAcknowledgeResult = { viewModel.historyTransfer.acknowledgeResult() },
+        )
 
-    private fun buildBackendPage(): View {
-        val content = pageContent()
-        content.addPageHeader("后台与诊断", "保活设置、系统能力与运行记录")
-
-        addSectionLabel(content, "运行状态", "通知链路与系统授权")
-        val statusCard = card().apply {
-            statusView = TextView(this@MainActivity).apply {
-                textSize = 13f
-                typeface = Typeface.MONOSPACE
-                setTextColor(COLOR_TEXT_SECONDARY)
-                setLineSpacing(dp(2).toFloat(), 1f)
-                setPadding(dp(16), dp(15), dp(16), dp(15))
-                background = rounded(COLOR_STATUS_FILL, 14f)
-            }
-            addView(statusView, matchWidthWrapHeight())
-        }
-        content.addView(statusCard, matchWidthWrapHeight())
-
-        addSectionLabel(content, "后台工具", "需要时再调整，日常无需反复操作")
-        val toolsCard = card()
-        toolsCard.addActionButton("开启前台保活", ButtonTone.PRIMARY) { startKeepAlive() }
-        toolsCard.addActionButton("关闭前台保活") { stopKeepAlive() }
-        toolsCard.addActionButton("打开无障碍保活设置") {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-        toolsCard.addActionButton("申请忽略电池优化") {
-            startActivity(
-                Intent(
-                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                    Uri.parse("package:$packageName"),
-                ),
+        ruleState.pendingUpdateDialog?.let { manifest ->
+            RuleUpdatePromptDialog(
+                manifest = manifest,
+                onConfirmInstall = viewModel::installPendingRuleUpdate,
+                onDismiss = viewModel::dismissRuleUpdateDialog,
             )
         }
-        if (Build.VERSION.SDK_INT >= 36) {
-            toolsCard.addActionButton("打开实时通知提升设置") { openPromotionSettingsSafely() }
-        }
-        toolsCard.addActionButton("刷新诊断状态", ButtonTone.QUIET) { refreshStatus() }
-        content.addView(toolsCard, matchWidthWrapHeight().apply { bottomMargin = dp(8) })
-        return scrollPage(content)
     }
 
-    private fun pageContent() = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(20), 0, dp(20), dp(12))
+    private fun showSnackbar(message: String) {
+        pendingSnackbarMessage?.invoke(message)
     }
 
-    private fun scrollPage(content: View): View = ScrollView(this).apply {
-        isFillViewport = true
-        clipToPadding = false
-        setBackgroundColor(COLOR_PAGE)
-        addView(content, ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
-    }
-
-    private fun LinearLayout.addPageHeader(title: String, summary: String) {
-        addView(TextView(this@MainActivity).apply {
-            text = title
-            textSize = 26f
-            setTextColor(COLOR_TEXT_PRIMARY)
-            setTypeface(typeface, Typeface.BOLD)
-            includeFontPadding = false
-        }, matchWidthWrapHeight())
-        addView(TextView(this@MainActivity).apply {
-            text = summary
-            textSize = 13f
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setPadding(0, dp(5), 0, dp(3))
-        }, matchWidthWrapHeight())
-    }
-
-    private fun buildHero(): View = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dp(18), dp(18), dp(18), dp(18))
-        background = rounded(COLOR_HERO, 24f)
-
-        addView(ImageView(this@MainActivity).apply {
-            setImageResource(R.mipmap.ic_launcher)
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            contentDescription = "流体胶囊图标"
-            background = rounded(COLOR_SURFACE, 16f)
-            outlineProvider = ViewOutlineProvider.BACKGROUND
-            clipToOutline = true
-        }, LinearLayout.LayoutParams(dp(62), dp(62)))
-
-        val copy = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(15), 0, 0, 0)
-        }
-        copy.addView(TextView(this@MainActivity).apply {
-            text = "通知云"
-            textSize = 13f
-            setTextColor(COLOR_HERO_ACCENT)
-            setTypeface(typeface, Typeface.BOLD)
-            letterSpacing = 0.12f
-        })
-        copy.addView(TextView(this@MainActivity).apply {
-            text = "流体胶囊"
-            textSize = 25f
-            setTextColor(Color.WHITE)
-            setTypeface(typeface, Typeface.BOLD)
-            includeFontPadding = false
-        })
-        copy.addView(TextView(this@MainActivity).apply {
-            text = "通知提取、验证码解析与胶囊展示"
-            textSize = 13f
-            setTextColor(COLOR_HERO_SECONDARY)
-            setPadding(0, dp(4), 0, 0)
-        })
-        addView(copy, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-    }
-
-    private fun buildFlowCard(): View = TextView(this).apply {
-        text = "短信通知  →  提取验证码  →  胶囊显示  →  点击复制"
-        textSize = 14f
-        setTextColor(COLOR_TEXT_SECONDARY)
-        gravity = Gravity.CENTER
-        setPadding(dp(14), dp(13), dp(14), dp(13))
-        background = rounded(COLOR_SURFACE, 16f, COLOR_BORDER, 1)
-    }
-
-    private fun buildBottomNavigation(): View = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER
-        setPadding(dp(6), dp(6), dp(6), dp(6))
-        background = rounded(COLOR_SURFACE_RAISED, 22f, COLOR_BORDER, 1)
-        elevation = dp(12).toFloat()
-
-        homeTab = buildNavigationTab("首页", R.drawable.ic_nav_home) { showPage(Page.HOME) }
-        rulesTab = buildNavigationTab("规则", R.drawable.ic_nav_rules) { showPage(Page.RULES) }
-        historyTab = buildNavigationTab("历史", R.drawable.ic_nav_history) { showPage(Page.HISTORY) }
-        backendTab = buildNavigationTab("后台", R.drawable.ic_nav_backend) { showPage(Page.BACKEND) }
-        listOf(homeTab, rulesTab, historyTab, backendTab).forEachIndexed { index, tab ->
-            addView(tab.root, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
-                if (index > 0) marginStart = dp(3)
-            })
-        }
-        updateNavigationSelection()
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun buildNavigationTab(
-        label: String,
-        iconRes: Int,
-        action: () -> Unit,
-    ): NavigationTab {
-        val icon = ImageView(this).apply {
-            setImageResource(iconRes)
-            imageTintList = ColorStateList.valueOf(COLOR_TEXT_TERTIARY)
-            contentDescription = "$label 图标"
-        }
-        val text = TextView(this).apply {
-            this.text = label
-            textSize = 11f
-            gravity = Gravity.CENTER
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setTypeface(typeface, Typeface.BOLD)
-            includeFontPadding = false
-        }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            background = rounded(Color.TRANSPARENT, 16f)
-            setOnTouchListener { view, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        view.animate().alpha(0.72f).setDuration(55).start()
-                        icon.animate().scaleX(0.82f).scaleY(0.82f).setDuration(55).start()
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        view.animate().alpha(1f).setDuration(130).start()
-                        icon.animate().scaleX(1f).scaleY(1f).setDuration(180)
-                            .setInterpolator(OvershootInterpolator(1.25f)).start()
-                    }
-                }
-                false
-            }
-            setOnClickListener {
-                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                action()
-            }
-            addView(icon, LinearLayout.LayoutParams(dp(23), dp(23)))
-            addView(text, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dp(3) })
-        }
-        return NavigationTab(root, icon, text)
-    }
-
-    private fun showPage(page: Page) {
-        if (page == currentPage) return
-        val direction = if (page.ordinal > currentPage.ordinal) 1f else -1f
-        pageView(currentPage).apply {
-            animate().cancel()
-            visibility = View.GONE
-            alpha = 1f
-            translationX = 0f
-        }
-        currentPage = page
-        pageView(page).apply {
-            animate().cancel()
-            alpha = 0.25f
-            translationX = direction * dp(18)
-            visibility = View.VISIBLE
-            animate()
-                .alpha(1f)
-                .translationX(0f)
-                .setDuration(210)
-                .setInterpolator(DecelerateInterpolator())
-                .start()
-        }
-        updateNavigationSelection()
-        if (page == Page.HISTORY) refreshHistory()
-        if (page == Page.BACKEND) refreshStatus()
-    }
-
-    private fun pageView(page: Page): View = when (page) {
-        Page.HOME -> homePage
-        Page.RULES -> rulesPage
-        Page.HISTORY -> historyPage
-        Page.BACKEND -> backendPage
-    }
-
-    private fun updateNavigationSelection() {
-        if (!::homeTab.isInitialized || !::rulesTab.isInitialized ||
-            !::historyTab.isInitialized || !::backendTab.isInitialized
-        ) return
-        styleNavigationTab(homeTab, currentPage == Page.HOME)
-        styleNavigationTab(rulesTab, currentPage == Page.RULES)
-        styleNavigationTab(historyTab, currentPage == Page.HISTORY)
-        styleNavigationTab(backendTab, currentPage == Page.BACKEND)
-    }
-
-    private fun styleNavigationTab(tab: NavigationTab, selected: Boolean) {
-        val color = if (selected) COLOR_PRIMARY_DARK else COLOR_TEXT_TERTIARY
-        tab.icon.imageTintList = ColorStateList.valueOf(color)
-        tab.label.setTextColor(color)
-        tab.root.background = rounded(if (selected) COLOR_ACCENT_SOFT else Color.TRANSPARENT, 16f)
-        if (tab.selected == selected) return
-        tab.selected = selected
-        tab.root.animate().cancel()
-        tab.icon.animate().cancel()
-        if (selected) {
-            tab.root.alpha = 0.72f
-            tab.root.scaleX = 0.94f
-            tab.root.scaleY = 0.94f
-            tab.root.animate()
-                .alpha(1f)
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(220)
-                .setInterpolator(OvershootInterpolator(1.15f))
-                .start()
-            tab.icon.rotation = -9f
-            tab.icon.scaleX = 0.78f
-            tab.icon.scaleY = 0.78f
-            tab.icon.animate()
-                .rotation(0f)
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(240)
-                .setInterpolator(OvershootInterpolator(1.45f))
-                .start()
-        } else {
-            tab.root.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(120).start()
-            tab.icon.animate().rotation(0f).scaleX(1f).scaleY(1f).setDuration(120).start()
-        }
-    }
-
-    private fun buildHistoryPage(): View {
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(COLOR_PAGE)
-        }
-        header.addView(TextView(this).apply {
-            text = "通知历史记录"
-            textSize = 26f
-            setTextColor(COLOR_TEXT_PRIMARY)
-            setTypeface(typeface, Typeface.BOLD)
-            includeFontPadding = false
-        }, matchWidthWrapHeight())
-        header.addView(TextView(this).apply {
-            text = "Notification History"
-            textSize = 13f
-            setTextColor(COLOR_PRIMARY)
-            setTypeface(typeface, Typeface.BOLD)
-            letterSpacing = 0.08f
-            setPadding(0, dp(3), 0, dp(14))
-        }, matchWidthWrapHeight())
-
-        val recordingCard = card()
-        recordingCard.addSettingRow(
-            title = "记录新通知",
-            summary = "关闭后停止写入，已有历史不会被删除",
-            checked = UserSettings.notificationHistoryEnabled(this),
-        ) { checked ->
-            UserSettings.setNotificationHistoryEnabled(this, checked)
-            toast(if (checked) "已开始记录新通知" else "已停止记录，原有历史已保留")
-            refreshHistory()
-        }
-        header.addView(recordingCard, matchWidthWrapHeight())
-
-        val privacyCard = card()
-        privacyCard.addHistoryRetentionSetting()
-        historyExportButton = privacyCard.addActionButton("导出历史") { pickHistoryDocument(HistoryTransferAction.EXPORT) }
-        historyImportButton = privacyCard.addActionButton("导入历史") { pickHistoryDocument(HistoryTransferAction.IMPORT) }
-        historyTransferStatus = TextView(this).apply {
-            textSize = 13f
-            setTextColor(COLOR_TEXT_SECONDARY)
-            setPadding(dp(5), dp(4), dp(5), dp(8))
-            visibility = View.GONE
-            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-        }
-        privacyCard.addView(historyTransferStatus, matchWidthWrapHeight())
-        historyClearButton = privacyCard.addActionButton("清空全部通知历史", ButtonTone.QUIET) {
-            if (deferHistoryMutation()) return@addActionButton
-            AlertDialog.Builder(this)
-                .setTitle("清空通知历史？")
-                .setMessage("这会永久删除本机保存的全部通知正文和处理结果。")
-                .setNegativeButton("取消", null)
-                .setPositiveButton("清空") { _, _ ->
-                    if (deferHistoryMutation()) return@setPositiveButton
-                    mutateHistory({ NotificationHistoryStore.clear(this) }) { deleted ->
-                        expandedHistoryPackage = null
-                        refreshHistory(animate = true)
-                        toast("已删除 $deleted 条历史")
-                    }
-                }
-                .show()
-        }
-        header.addView(privacyCard, matchWidthWrapHeight().apply { topMargin = dp(10) })
-
-        historySortMode = HistorySortMode.fromStorageValue(
-            UserSettings.notificationHistorySortMode(this),
-        )
-        val sortCard = card().apply {
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-        }
-        sortCard.addView(TextView(this).apply {
-            text = "排序方式"
-            textSize = 13f
-            setTextColor(COLOR_TEXT_SECONDARY)
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(4), 0, dp(4), dp(8))
-        }, matchWidthWrapHeight())
-        val sortRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        historySortTimeTab = buildHistorySortTab("按时间") {
-            setHistorySortMode(HistorySortMode.TIME)
-        }
-        historySortCountTab = buildHistorySortTab("按软件通知次数") {
-            setHistorySortMode(HistorySortMode.APP_COUNT)
-        }
-        sortRow.addView(
-            historySortTimeTab,
-            LinearLayout.LayoutParams(0, dp(44), 1f),
-        )
-        sortRow.addView(
-            historySortCountTab,
-            LinearLayout.LayoutParams(0, dp(44), 1.35f).apply { marginStart = dp(7) },
-        )
-        sortCard.addView(sortRow, matchWidthWrapHeight())
-        header.addView(sortCard, matchWidthWrapHeight().apply { topMargin = dp(10) })
-        updateHistorySortSelection()
-
-        historyCountView = TextView(this).apply {
-            textSize = 13f
-            setTextColor(COLOR_TEXT_SECONDARY)
-            setPadding(dp(4), dp(16), dp(4), dp(9))
-        }
-        header.addView(historyCountView, matchWidthWrapHeight())
-
-        historyEmptyView = TextView(this).apply {
-            text = "还没有通知历史\n打开上方开关后，新通知会保存在这里"
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setLineSpacing(dp(4).toFloat(), 1f)
-            setPadding(dp(20), dp(36), dp(20), dp(36))
-        }
-        header.addView(historyEmptyView, matchWidthWrapHeight())
-
-        historyAdapter = NotificationHistoryAdapter { sourcePackage ->
-            expandedHistoryPackage = if (expandedHistoryPackage == sourcePackage) {
-                null
-            } else {
-                sourcePackage
-            }
-            refreshHistory(animate = true)
-        }
-        historyListView = ListView(this).apply {
-            divider = null
-            dividerHeight = dp(10)
-            clipToPadding = false
-            setPadding(dp(20), 0, dp(20), dp(12))
-            setBackgroundColor(COLOR_PAGE)
-            isVerticalScrollBarEnabled = false
-            addHeaderView(header, null, false)
-            adapter = historyAdapter
-        }
-        refreshHistory()
-        return historyListView
-    }
-
-    private fun pickHistoryDocument(action: HistoryTransferAction) {
-        if (!historyTransfer.beginPicking(action)) return
+    private fun pickHistoryDocument(
+        action: HistoryTransferAction,
+        showMessage: (String) -> Unit,
+    ) {
+        if (!viewModel.historyTransfer.beginPicking(action)) return
         val exporting = action == HistoryTransferAction.EXPORT
-        val intent = Intent(if (exporting) Intent.ACTION_CREATE_DOCUMENT else Intent.ACTION_OPEN_DOCUMENT).apply {
+        val intent = Intent(
+            if (exporting) Intent.ACTION_CREATE_DOCUMENT else Intent.ACTION_OPEN_DOCUMENT,
+        ).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "application/json"
             if (exporting) {
@@ -883,1261 +341,178 @@ class MainActivity : Activity() {
             }
         }
         try {
-            startActivityForResult(intent, if (exporting) HISTORY_EXPORT_REQUEST else HISTORY_IMPORT_REQUEST)
+            if (exporting) {
+                exportDocumentLauncher.launch(intent)
+            } else {
+                importDocumentLauncher.launch(intent)
+            }
         } catch (_: ActivityNotFoundException) {
-            historyTransfer.acceptDocument(null)
-            toast("没有可用的文件选择器")
+            viewModel.historyTransfer.acceptDocument(null)
+            showMessage("没有可用的文件选择器")
         } catch (_: SecurityException) {
-            historyTransfer.acceptDocument(null)
-            toast("无法打开文件选择器")
+            viewModel.historyTransfer.acceptDocument(null)
+            showMessage("无法打开文件选择器")
         }
-    }
-
-    private fun renderHistoryTransfer(state: HistoryTransferState) {
-        val busy = state != HistoryTransferState.Idle
-        historyExportButton.isEnabled = !busy
-        historyImportButton.isEnabled = !busy
-        historyClearButton.isEnabled = !busy
-        historyRetentionValueView.isEnabled = !busy
-        historyTransferStatus.text = when (state) {
-            is HistoryTransferState.Working -> state.message
-            is HistoryTransferState.Picking -> "正在选择${if (state.action == HistoryTransferAction.EXPORT) "保存位置" else "备份文件"}…"
-            else -> ""
-        }
-        historyTransferStatus.visibility = if (historyTransferStatus.text.isEmpty()) View.GONE else View.VISIBLE
-        if (historyDialogState == state && historyTransferDialog?.isShowing == true) return
-        historyTransferDialog?.dismiss()
-        historyTransferDialog = null
-        historyDialogState = state
-        when (state) {
-            is HistoryTransferState.Preview -> {
-                val expired = state.expired > 0
-                val message = "备份共 ${state.metadata.count} 条记录。\n当前保留期限：${state.policy.chineseLabel()}。\n" +
-                    "超过当前期限：${state.expired} 条。\n导入会保留本机历史，并跳过重复记录。" +
-                    if (expired) "\n选择导入全部会将本机历史保留期限改为永久。" else ""
-                val builder = AlertDialog.Builder(this)
-                    .setTitle("导入通知历史")
-                    .setMessage(message)
-                    .setNegativeButton("取消") { _, _ -> historyTransfer.cancelPreview() }
-                    .setPositiveButton(if (expired) "仅导入期限内记录" else "导入") { _, _ -> historyTransfer.confirmImport(false) }
-                    .setOnCancelListener { historyTransfer.cancelPreview() }
-                if (expired) builder.setNeutralButton("改为永久并导入全部") { _, _ -> historyTransfer.confirmImport(true) }
-                historyTransferDialog = builder.create().also { dialog ->
-                    dialog.show()
-                    // Long choices remain legible on narrow screens.
-                    for (which in listOf(AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEUTRAL)) {
-                        dialog.getButton(which)?.apply { isSingleLine = false; maxLines = 3 }
-                    }
-                }
-            }
-            is HistoryTransferState.Finished -> {
-                refreshHistory(animate = state.success)
-                historyRetentionValueView.text = UserSettings.notificationHistoryRetentionPolicy(this).bilingualLabel()
-                historyTransferDialog = AlertDialog.Builder(this)
-                    .setTitle(if (state.success) "操作完成" else "操作失败")
-                    .setMessage(state.message)
-                    .setPositiveButton("确定") { _, _ -> historyTransfer.acknowledgeResult() }
-                    .setOnCancelListener { historyTransfer.acknowledgeResult() }
-                    .show()
-            }
-            else -> Unit
-        }
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun buildHistorySortTab(label: String, action: () -> Unit): TextView =
-        TextView(this).apply {
-            text = label
-            textSize = 13f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD)
-            setOnTouchListener(subtlePressAnimator())
-            setOnClickListener {
-                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                action()
-            }
-        }
-
-    private fun setHistorySortMode(mode: HistorySortMode) {
-        if (historySortMode == mode) return
-        historySortMode = mode
-        expandedHistoryPackage = null
-        UserSettings.setNotificationHistorySortMode(this, mode.storageValue)
-        updateHistorySortSelection()
-        refreshHistory(animate = true)
-    }
-
-    private fun updateHistorySortSelection() {
-        if (!::historySortTimeTab.isInitialized || !::historySortCountTab.isInitialized) return
-        styleHistorySortTab(historySortTimeTab, historySortMode == HistorySortMode.TIME)
-        styleHistorySortTab(historySortCountTab, historySortMode == HistorySortMode.APP_COUNT)
-    }
-
-    private fun styleHistorySortTab(tab: TextView, selected: Boolean) {
-        tab.setTextColor(if (selected) COLOR_PRIMARY_DARK else COLOR_TEXT_TERTIARY)
-        tab.background = rounded(if (selected) COLOR_ACCENT_SOFT else COLOR_CONTROL, 13f)
-    }
-
-    private fun refreshHistory(animate: Boolean = false) {
-        if (!::historyAdapter.isInitialized) return
-        val total = NotificationHistoryStore.count(this)
-        val rows: List<HistoryListItem>
-        val appCount: Int
-        val visibleNotificationCount: Int
-        when (historySortMode) {
-            HistorySortMode.TIME -> {
-                val entries = NotificationHistoryStore.recent(this, HISTORY_DISPLAY_LIMIT)
-                rows = entries.map { HistoryListItem.Entry(it, nested = false) }
-                appCount = 0
-                visibleNotificationCount = entries.size
-            }
-            HistorySortMode.APP_COUNT -> {
-                val groups = NotificationHistoryStore.appGroups(this)
-                rows = buildList {
-                    groups.forEach { group ->
-                        val expanded = group.sourcePackage == expandedHistoryPackage
-                        add(HistoryListItem.AppGroup(group, expanded))
-                        if (expanded) {
-                            NotificationHistoryStore.forPackage(
-                                this@MainActivity,
-                                group.sourcePackage,
-                                HISTORY_DISPLAY_LIMIT,
-                            ).forEach { entry ->
-                                add(HistoryListItem.Entry(entry, nested = true))
-                            }
-                        }
-                    }
-                }
-                appCount = groups.size
-                visibleNotificationCount = 0
-            }
-        }
-        historyAdapter.replace(rows)
-        if (animate) animateHistoryList()
-        historyCountView.text = buildString {
-            append(if (UserSettings.notificationHistoryEnabled(this@MainActivity)) "● 正在记录" else "○ 记录已关闭")
-            append("  ·  共 $total 条")
-            if (historySortMode == HistorySortMode.TIME && total > visibleNotificationCount) {
-                append("  ·  显示最近 $visibleNotificationCount 条")
-            }
-            if (historySortMode == HistorySortMode.APP_COUNT) {
-                append("  ·  $appCount 个软件")
-            }
-        }
-        historyEmptyView.visibility = if (total == 0L) View.VISIBLE else View.GONE
-    }
-
-    private fun animateHistoryList() {
-        if (!::historyListView.isInitialized) return
-        historyListView.animate().cancel()
-        historyListView.alpha = 0.45f
-        historyListView.translationY = dp(9).toFloat()
-        historyListView.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .setDuration(190)
-            .setInterpolator(DecelerateInterpolator())
-            .start()
-    }
-
-    private fun decisionLabel(decision: String): String = when (decision) {
-        "PUBLISHED" -> "● 已提交展示队列"
-        "FILTERED" -> "● 已被规则过滤"
-        "SKIPPED" -> "● 未上云"
-        "CAPTURED" -> "● 正在处理"
-        else -> "● 处理结果未知"
-    }
-
-    private fun confirmDeleteHistoryEntry(entry: NotificationHistoryEntry) {
-        if (deferHistoryMutation()) return
-        AlertDialog.Builder(this)
-            .setTitle("删除这条通知？")
-            .setMessage("${entry.sourceLabel} · ${entry.title.ifBlank { "无标题" }}")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("删除") { _, _ ->
-                if (deferHistoryMutation()) return@setPositiveButton
-                mutateHistory({ NotificationHistoryStore.deleteEntry(this, entry.id) }) {
-                    refreshHistory(animate = true)
-                }
-            }
-            .show()
-    }
-
-    private fun confirmDeleteHistoryPackage(sourcePackage: String, sourceLabel: String) {
-        if (deferHistoryMutation()) return
-        AlertDialog.Builder(this)
-            .setTitle("删除 ${sourceLabel.ifBlank { sourcePackage }} 的历史？")
-            .setMessage("只删除本机历史，不会修改该应用的白名单或专属规则。")
-            .setNegativeButton("取消", null)
-            .setPositiveButton("删除") { _, _ ->
-                if (deferHistoryMutation()) return@setPositiveButton
-                mutateHistory({ NotificationHistoryStore.deletePackage(this, sourcePackage) }) { deleted ->
-                    expandedHistoryPackage = null
-                    refreshHistory(animate = true)
-                    toast("已删除 $deleted 条历史")
-                }
-            }
-            .show()
-    }
-
-    private fun addSectionLabel(parent: LinearLayout, title: String, subtitle: String) {
-        val label = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(4), dp(24), dp(4), dp(10))
-        }
-        label.addView(TextView(this).apply {
-            text = title
-            textSize = 18f
-            setTextColor(COLOR_TEXT_PRIMARY)
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        label.addView(TextView(this).apply {
-            text = subtitle
-            textSize = 12f
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setPadding(0, dp(2), 0, 0)
-        })
-        parent.addView(label, matchWidthWrapHeight())
-    }
-
-    private fun card(): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(12), dp(12), dp(12), dp(12))
-        background = rounded(COLOR_SURFACE, 20f, COLOR_BORDER, 1)
-        elevation = dp(1).toFloat()
-    }
-
-    private fun buildThemeModeCard(): View = card().apply {
-        setPadding(dp(10), dp(10), dp(10), dp(10))
-        val selectedMode = UserSettings.themeMode(this@MainActivity)
-        addView(TextView(this@MainActivity).apply {
-            text = when (selectedMode) {
-                ThemeMode.DARK -> "当前：始终使用暗色外观"
-                ThemeMode.LIGHT -> "当前：始终使用浅色外观"
-                ThemeMode.SYSTEM -> "当前：跟随系统自动切换"
-            }
-            textSize = 13f
-            setTextColor(COLOR_TEXT_SECONDARY)
-            setPadding(dp(5), dp(3), dp(5), dp(10))
-        }, matchWidthWrapHeight())
-
-        val choices = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        listOf(ThemeMode.DARK, ThemeMode.LIGHT, ThemeMode.SYSTEM).forEachIndexed { index, mode ->
-            val selected = mode == selectedMode
-            choices.addView(TextView(this@MainActivity).apply {
-                text = mode.label
-                textSize = 14f
-                gravity = Gravity.CENTER
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(if (selected) COLOR_PRIMARY_DARK else COLOR_TEXT_SECONDARY)
-                background = RippleDrawable(
-                    ColorStateList.valueOf(COLOR_RIPPLE),
-                    rounded(if (selected) COLOR_ACCENT_SOFT else COLOR_CONTROL, 13f),
-                    rounded(COLOR_SURFACE, 13f),
-                )
-                contentDescription = "暗黑模式：${mode.label}${if (selected) "，已选择" else ""}"
-                setOnClickListener {
-                    if (mode == UserSettings.themeMode(this@MainActivity)) return@setOnClickListener
-                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    UserSettings.setThemeMode(this@MainActivity, mode)
-                    recreate()
-                }
-            }, LinearLayout.LayoutParams(0, dp(48), if (mode == ThemeMode.SYSTEM) 1.25f else 1f).apply {
-                if (index > 0) marginStart = dp(7)
-            })
-        }
-        addView(choices, matchWidthWrapHeight())
-    }
-
-    private fun buildWhitelistManagementCard(): View = card().apply {
-        setPadding(dp(8), dp(8), dp(8), dp(8))
-        val row = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-            background = RippleDrawable(
-                ColorStateList.valueOf(COLOR_RIPPLE),
-                rounded(COLOR_STATUS_FILL, 16f),
-                rounded(COLOR_SURFACE, 16f),
-            )
-        }
-        whitelistCountView = TextView(this@MainActivity).apply {
-            textSize = 19f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setTypeface(typeface, Typeface.BOLD)
-            background = rounded(COLOR_PRIMARY, 15f)
-            contentDescription = "已选择应用数量"
-        }
-        row.addView(whitelistCountView, LinearLayout.LayoutParams(dp(54), dp(54)))
-
-        val labels = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), 0, dp(8), 0)
-        }
-        labels.addView(TextView(this@MainActivity).apply {
-            text = "管理通知来源"
-            textSize = 16f
-            setTextColor(COLOR_TEXT_PRIMARY)
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        whitelistSummaryView = TextView(this@MainActivity).apply {
-            textSize = 12f
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setPadding(0, dp(3), 0, 0)
-        }
-        labels.addView(whitelistSummaryView)
-        row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-
-        row.addView(TextView(this@MainActivity).apply {
-            text = "管理  ›"
-            textSize = 14f
-            setTextColor(COLOR_PRIMARY_DARK)
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER_VERTICAL
-        }, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            dp(48),
-        ))
-        row.setOnClickListener {
-            row.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            startActivity(Intent(this@MainActivity, WhitelistActivity::class.java))
-        }
-        addView(row, matchWidthWrapHeight())
-        refreshWhitelistSummary()
-    }
-
-    /** Same shape as the whitelist card, with the live sync state in place of a static blurb. */
-    private fun buildSyncCard(): View = card().apply {
-        setPadding(dp(8), dp(8), dp(8), dp(8))
-        val row = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-            background = RippleDrawable(
-                ColorStateList.valueOf(COLOR_RIPPLE),
-                rounded(COLOR_STATUS_FILL, 16f),
-                rounded(COLOR_SURFACE, 16f),
-            )
-        }
-        syncBadgeView = TextView(this@MainActivity).apply {
-            text = "云"
-            textSize = 19f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, Typeface.BOLD)
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-        row.addView(syncBadgeView, LinearLayout.LayoutParams(dp(54), dp(54)))
-        val labels = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), 0, dp(8), 0)
-        }
-        labels.addView(TextView(this@MainActivity).apply {
-            text = "短信云同步"
-            textSize = 16f
-            setTextColor(COLOR_TEXT_PRIMARY)
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        syncSummaryView = TextView(this@MainActivity).apply {
-            textSize = 12f
-            maxLines = 2
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setPadding(0, dp(3), 0, 0)
-        }
-        labels.addView(syncSummaryView)
-        row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(TextView(this@MainActivity).apply {
-            text = "设置  ›"
-            textSize = 14f
-            setTextColor(COLOR_PRIMARY_DARK)
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER_VERTICAL
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)))
-        row.setOnClickListener {
-            row.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            startActivity(Intent(this@MainActivity, io.github.venompool888.fluidcapsule.sync.SyncSettingsActivity::class.java))
-        }
-        addView(row, matchWidthWrapHeight())
-        refreshSyncSummary()
-    }
-
-    private fun refreshSyncSummary() {
-        if (!::syncBadgeView.isInitialized || !::syncSummaryView.isInitialized) return
-        val config = io.github.venompool888.fluidcapsule.sync.SyncConfig(this)
-        val live = config.isConnected && io.github.venompool888.fluidcapsule.sync.SyncRealtimeService.connected
-        val summary = when {
-            !config.isConnected -> "未连接 · 接收胶囊短信从其他手机推送的短信"
-            live -> "实时接收已连接"
-            config.lastError.isNotBlank() -> "重连中：${config.lastError}"
-            else -> "正在连接实时接收…"
-        }
-        syncSummaryView.text = summary
-        val reconnecting = config.isConnected && !live && config.lastError.isNotBlank()
-        syncSummaryView.setTextColor(
-            when {
-                live -> COLOR_PRIMARY_DARK
-                reconnecting -> palette.warning
-                else -> COLOR_TEXT_TERTIARY
-            }
-        )
-        syncBadgeView.background = rounded(if (live) COLOR_PRIMARY else COLOR_CONTROL, 15f)
-        syncBadgeView.setTextColor(if (live) Color.WHITE else COLOR_TEXT_SECONDARY)
-        (syncBadgeView.parent as? View)?.contentDescription = "短信云同步，$summary"
-    }
-
-    private fun refreshWhitelistSummary() {
-        if (!::whitelistCountView.isInitialized || !::whitelistSummaryView.isInitialized) return
-        val count = NotificationWhitelist.packages(this).size
-        whitelistCountView.text = count.toString()
-        whitelistSummaryView.text = if (count == 0) {
-            "尚未选择应用"
-        } else {
-            "已选择 $count 个应用 · 点击查看或修改"
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun LinearLayout.addSettingRow(
-        title: String,
-        summary: String,
-        checked: Boolean,
-        onChanged: (Boolean) -> Unit,
-    ) {
-        val row = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), dp(10), dp(3), dp(10))
-        }
-        val labels = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        labels.addView(TextView(this@MainActivity).apply {
-            text = title
-            textSize = 16f
-            setTextColor(COLOR_TEXT_PRIMARY)
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        labels.addView(TextView(this@MainActivity).apply {
-            text = summary
-            textSize = 12f
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setPadding(0, dp(3), dp(8), 0)
-        })
-        row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        val toggle = Switch(this@MainActivity).apply {
-            isChecked = checked
-            contentDescription = title
-            setOnCheckedChangeListener { _, value -> onChanged(value) }
-        }
-        row.addView(toggle, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
-        row.setOnClickListener { toggle.isChecked = !toggle.isChecked }
-        addView(row, matchWidthWrapHeight())
-    }
-
-    private fun LinearLayout.addDivider() {
-        addView(View(this@MainActivity).apply { setBackgroundColor(COLOR_DIVIDER) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
-                marginStart = dp(5)
-                marginEnd = dp(5)
-            },
-        )
-    }
-
-    private fun LinearLayout.addDisplayDurationSetting() {
-        val currentMinutes = UserSettings.capsuleDisplayDurationMinutes(this@MainActivity)
-        addView(TextView(this@MainActivity).apply {
-            text = "单条胶囊显示时长"
-            textSize = 16f
-            setTextColor(COLOR_TEXT_PRIMARY)
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(5), dp(7), dp(5), 0)
-        }, matchWidthWrapHeight())
-        addView(TextView(this@MainActivity).apply {
-            text = "1–30 分钟连续可调；从下一条胶囊开始生效"
-            textSize = 12f
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setPadding(dp(5), dp(4), dp(5), dp(6))
-        }, matchWidthWrapHeight())
-
-        val valueView = TextView(this@MainActivity).apply {
-            text = "$currentMinutes 分钟"
-            textSize = 24f
-            gravity = Gravity.CENTER
-            setTextColor(COLOR_PRIMARY_DARK)
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(4), 0, 0)
-        }
-        addView(valueView, matchWidthWrapHeight())
-
-        var selectedMinutes = currentMinutes
-        val slider = SeekBar(this@MainActivity).apply {
-            max = CapsuleDisplayDuration.maxMinutes - CapsuleDisplayDuration.minMinutes
-            progress = currentMinutes - CapsuleDisplayDuration.minMinutes
-            contentDescription = "胶囊显示时长"
-            setPadding(dp(3), 0, dp(3), 0)
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    selectedMinutes = progress + CapsuleDisplayDuration.minMinutes
-                    valueView.text = "$selectedMinutes 分钟"
-                    contentDescription = "胶囊显示 $selectedMinutes 分钟"
-                }
-
-                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                    UserSettings.setCapsuleDisplayDurationMinutes(
-                        this@MainActivity,
-                        selectedMinutes,
-                    )
-                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    toast("胶囊将显示 $selectedMinutes 分钟")
-                }
-            })
-        }
-        addView(slider, matchWidthWrapHeight())
-
-        val rangeLabels = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(9), 0, dp(9), dp(5))
-        }
-        rangeLabels.addView(TextView(this@MainActivity).apply {
-            text = "${CapsuleDisplayDuration.minMinutes} 分钟"
-            textSize = 11f
-            setTextColor(COLOR_TEXT_TERTIARY)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        rangeLabels.addView(TextView(this@MainActivity).apply {
-            text = "${CapsuleDisplayDuration.maxMinutes} 分钟"
-            textSize = 11f
-            gravity = Gravity.END
-            setTextColor(COLOR_TEXT_TERTIARY)
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        addView(rangeLabels, matchWidthWrapHeight())
-    }
-
-    private fun LinearLayout.addHistoryRetentionSetting() {
-        val currentPolicy = UserSettings.notificationHistoryRetentionPolicy(this@MainActivity)
-        addView(TextView(this@MainActivity).apply {
-            text = "自动保留时间"
-            textSize = 16f
-            setTextColor(COLOR_TEXT_PRIMARY)
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(5), dp(7), dp(5), 0)
-        }, matchWidthWrapHeight())
-        val valueView = TextView(this@MainActivity).apply {
-            text = currentPolicy.bilingualLabel()
-            textSize = 18f
-            gravity = Gravity.CENTER
-            setTextColor(COLOR_PRIMARY_DARK)
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(dp(12), dp(13), dp(12), dp(13))
-            background = RippleDrawable(
-                ColorStateList.valueOf(COLOR_RIPPLE),
-                rounded(COLOR_ACCENT_SOFT, 14f),
-                null,
-            )
-            contentDescription = "选择通知历史自动保留时间"
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { showHistoryRetentionDialog(this) }
-        }
-        historyRetentionValueView = valueView
-        addView(valueView, matchWidthWrapHeight().apply {
-            topMargin = dp(10)
-            bottomMargin = dp(8)
-        })
-        addView(TextView(this@MainActivity).apply {
-            text = "点击选择天、月、年或永久保存；长按记录仍可单独删除"
-            textSize = 12f
-            setTextColor(COLOR_TEXT_TERTIARY)
-            setPadding(dp(5), 0, dp(5), dp(7))
-        }, matchWidthWrapHeight())
-    }
-
-    private fun showHistoryRetentionDialog(valueView: TextView) {
-        if (deferHistoryMutation()) return
-        val currentPolicy = UserSettings.notificationHistoryRetentionPolicy(this)
-        val units = HistoryRetentionUnit.entries
-        val numberPicker = NumberPicker(this).apply {
-            minValue = HistoryRetentionPolicy.MIN_VALUE
-            maxValue = HistoryRetentionPolicy.MAX_VALUE
-            value = currentPolicy.value.takeIf { it > 0 } ?: 1
-            wrapSelectorWheel = false
-        }
-        val unitPicker = NumberPicker(this).apply {
-            minValue = 0
-            maxValue = units.lastIndex
-            displayedValues = units.map { it.pickerLabel }.toTypedArray()
-            value = units.indexOf(currentPolicy.unit)
-            wrapSelectorWheel = false
-        }
-        fun updateNumberState(unitIndex: Int) {
-            val forever = units[unitIndex] == HistoryRetentionUnit.FOREVER
-            numberPicker.isEnabled = !forever
-            numberPicker.alpha = if (forever) 0.35f else 1f
-        }
-        updateNumberState(unitPicker.value)
-        unitPicker.setOnValueChangedListener { _, _, newValue -> updateNumberState(newValue) }
-
-        val pickerRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            addView(numberPicker, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(unitPicker, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.45f))
-        }
-        val dialogContent = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), 0, dp(18), 0)
-            addView(TextView(this@MainActivity).apply {
-                text = "按自然日、自然月或自然年自动清理；选择永久后不会自动删除。"
-                textSize = 13f
-                setTextColor(COLOR_TEXT_SECONDARY)
-                setPadding(0, 0, 0, dp(8))
-            }, matchWidthWrapHeight())
-            addView(pickerRow, matchWidthWrapHeight())
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("通知历史保留时间")
-            .setView(dialogContent)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("保存") { _, _ ->
-                if (deferHistoryMutation()) return@setPositiveButton
-                val unit = units[unitPicker.value]
-                val policy = if (unit == HistoryRetentionUnit.FOREVER) {
-                    HistoryRetentionPolicy(0, unit)
-                } else {
-                    HistoryRetentionPolicy(numberPicker.value, unit)
-                }
-                valueView.text = policy.bilingualLabel()
-                valueView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                mutateHistory({ NotificationHistoryStore.setRetentionPolicy(this, policy) }) { deleted ->
-                    refreshHistory(animate = deleted > 0)
-                    toast("历史将${if (policy.unit == HistoryRetentionUnit.FOREVER) "永久保存" else "保留 ${policy.chineseLabel()}"}")
-                }
-            }
-            .show()
-    }
-
-    private fun <T> mutateHistory(work: () -> T, done: (T) -> Unit) {
-        historyMutationExecutor.execute {
-            val result = runCatching(work)
-            runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
-                result.onSuccess(done).onFailure { toast(it.message ?: "通知历史操作失败，请稍后重试") }
-            }
-        }
-    }
-
-    private fun deferHistoryMutation(): Boolean {
-        if (historyTransfer.state == HistoryTransferState.Idle) return false
-        toast("通知历史正在处理，请稍后重试")
-        return true
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun LinearLayout.addActionButton(
-        label: String,
-        tone: ButtonTone = ButtonTone.SECONDARY,
-        action: () -> Unit,
-    ): Button {
-        val colors = when (tone) {
-            ButtonTone.PRIMARY -> COLOR_PRIMARY to Color.WHITE
-            ButtonTone.ACCENT -> COLOR_ACCENT_SOFT to COLOR_PRIMARY_DARK
-            ButtonTone.QUIET -> COLOR_QUIET to COLOR_TEXT_SECONDARY
-            ButtonTone.SECONDARY -> COLOR_CONTROL to COLOR_TEXT_PRIMARY
-        }
-        val button = Button(this@MainActivity).apply {
-            text = label
-            textSize = 15f
-            isAllCaps = false
-            setTextColor(colors.second)
-            setTypeface(typeface, Typeface.BOLD)
-            background = RippleDrawable(
-                ColorStateList.valueOf(COLOR_RIPPLE),
-                rounded(colors.first, 14f),
-                rounded(COLOR_SURFACE, 14f),
-            )
-            stateListAnimator = null
-            minHeight = 0
-            minimumHeight = 0
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-            setOnTouchListener { view, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> view.animate()
-                        .scaleX(0.985f).scaleY(0.985f).alpha(0.88f).setDuration(70).start()
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.animate()
-                        .scaleX(1f).scaleY(1f).alpha(1f).setDuration(110).start()
-                }
-                false
-            }
-            setOnClickListener {
-                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                action()
-            }
-        }
-        addView(button, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(54),
-        ).apply { topMargin = dp(7) })
-        return button
-    }
-
-    private fun publishTestOtp() {
-        val now = System.currentTimeMillis()
-        val showDirectly = UserSettings.showOtpDirectly(this)
-        PublisherRouter.publish(
-            this,
-            CapsuleEvent(
-                sourcePackage = packageName,
-                eventId = UUID.randomUUID().toString(),
-                kind = CapsuleKind.OTP,
-                title = "测试验证码",
-                shortText = "482913",
-                body = "5 分钟内有效 · 点击复制",
-                action = CapsuleAction.CopySensitiveText("482913"),
-                privacy = if (showDirectly) CapsulePrivacy.SHOW_FULL else CapsulePrivacy.HIDE_SENSITIVE,
-                createdAtMillis = now,
-                expiresAtMillis = now + 5 * 60_000L,
-                dedupeKey = "test:482913",
-            ),
-        )
-        refreshStatus()
     }
 
     private fun requestNotificationPermissionOrOpenSettings() {
         val manager = getSystemService(NotificationManager::class.java)
         if (manager.areNotificationsEnabled()) {
-            startActivity(
-                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
-            )
+            SystemHealthChecker.openAppNotificationSettings(this)
             return
         }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
+            postNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            startActivity(
-                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
-            )
+            SystemHealthChecker.openAppNotificationSettings(this)
         }
     }
 
-    private fun openPromotionSettingsSafely() {
-        val promotionIntent = Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
-            .setData(Uri.parse("package:$packageName"))
-        try {
-            startActivity(promotionIntent)
-        } catch (_: ActivityNotFoundException) {
-            DiagnosticsStore.markPublish(
-                this,
-                "PROMOTION_SETTINGS",
-                "unsupported_promotion_settings_fallback_to_app_notifications",
-            )
-            Toast.makeText(
-                this,
-                "当前系统未提供实时通知提升入口，已打开普通通知设置",
-                Toast.LENGTH_LONG,
-            ).show()
-            try {
-                startActivity(
-                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
-                )
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(this, "系统没有可用的通知设置入口", Toast.LENGTH_LONG).show()
+    private fun handleKeepAliveToggle(enabled: Boolean, showMessage: (String) -> Unit) {
+        if (enabled) {
+            val manager = getSystemService(NotificationManager::class.java)
+            if (!manager.areNotificationsEnabled()) {
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    pendingEnableKeepAliveAfterPermission = true
+                    postNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    showMessage("请先授予通知发布权限以开启前台保活")
+                } else {
+                    SystemHealthChecker.openAppNotificationSettings(this)
+                    showMessage("请先在系统通知设置中允许通知后开启前台保活")
+                }
+                return
+            }
+        }
+        pendingEnableKeepAliveAfterPermission = false
+        viewModel.setKeepAliveEnabled(enabled)
+        showMessage(if (enabled) "已开启前台保活服务" else "已关闭前台保活服务")
+    }
+
+    private fun openPromotionSettingsSafely(showMessage: (String) -> Unit) {
+        when (SystemHealthChecker.openPromotionSettingsSafely(this)) {
+            PromotionSettingsLaunchResult.OpenedPromotionSettings -> Unit
+            PromotionSettingsLaunchResult.FallbackToAppNotificationSettings -> {
+                showMessage("当前系统未提供实时通知提升入口，已打开普通通知设置")
+            }
+            PromotionSettingsLaunchResult.Unavailable -> {
+                showMessage("系统没有可用的通知设置入口")
             }
         }
     }
+}
 
-    private fun startKeepAlive() {
-        val manager = getSystemService(NotificationManager::class.java)
-        if (!manager.areNotificationsEnabled() && Build.VERSION.SDK_INT >= 33) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 100)
-            return
-        }
-        getSharedPreferences("settings", MODE_PRIVATE)
-            .edit()
-            .putBoolean("keep_alive_enabled", true)
-            .apply()
-        startForegroundService(Intent(this, KeepAliveService::class.java))
-        refreshStatus()
-    }
-
-    private fun stopKeepAlive() {
-        getSharedPreferences("settings", MODE_PRIVATE)
-            .edit()
-            .putBoolean("keep_alive_enabled", false)
-            .apply()
-        stopService(Intent(this, KeepAliveService::class.java))
-        refreshStatus()
-    }
-
-    private fun refreshStatus() {
-        val manager = getSystemService(NotificationManager::class.java)
-        val listenerEnabled = Settings.Secure.getString(
-            contentResolver,
-            "enabled_notification_listeners",
-        )?.split(':')
-            ?.mapNotNull(ComponentName::unflattenFromString)
-            ?.any { it.packageName == packageName && it.className == CapsuleNotificationListenerService::class.java.name }
-            ?: false
-        val powerManager = getSystemService(PowerManager::class.java)
-        val keepAliveRequested = getSharedPreferences("settings", MODE_PRIVATE)
-            .getBoolean("keep_alive_enabled", false)
-        val promotion = if (Build.VERSION.SDK_INT >= 36) {
-            manager.canPostPromotedNotifications()
-        } else {
-            false
-        }
-
-        notificationPermissionButton.text = if (manager.areNotificationsEnabled()) {
-            "2. 通知发布已授权 ✓（点此查看设置）"
-        } else {
-            "2. 授予通知发布权限"
-        }
-        refreshWhitelistSummary()
-        refreshSyncSummary()
-
-        statusView.text = buildString {
-            appendLine(statusLine("通知发布", manager.areNotificationsEnabled()))
-            appendLine(statusLine("通知读取", listenerEnabled))
-            appendLine(statusLine("实时通知提升", promotion))
-            appendLine(statusLine("忽略电池优化", powerManager.isIgnoringBatteryOptimizations(packageName)))
-            appendLine(statusLine("前台保活请求", keepAliveRequested))
-            appendLine()
-            appendLine("最近活动")
-            append(DiagnosticsStore.snapshot(this@MainActivity))
-        }
-    }
-
-    private fun statusLine(label: String, enabled: Boolean): String =
-        "${if (enabled) "✓" else "○"}  ${label.padEnd(8, '　')} ${if (enabled) "已开启" else "未开启"}"
-
-    private fun configureSystemBars() = configureFluidSystemBars()
-
-    private fun applySystemBarInsets(
-        root: View,
-        pageHost: View,
-        bottomNavigation: View,
-        statusBarScrim: View,
-        navigationBarScrim: View,
-    ) {
-        root.setOnApplyWindowInsetsListener { _, insets ->
-            val top: Int
-            val bottom: Int
-            if (Build.VERSION.SDK_INT >= 30) {
-                val bars = insets.getInsets(WindowInsets.Type.systemBars())
-                top = bars.top
-                bottom = bars.bottom
-            } else {
-                @Suppress("DEPRECATION")
-                top = insets.systemWindowInsetTop
-                @Suppress("DEPRECATION")
-                bottom = insets.systemWindowInsetBottom
-            }
-            pageHost.setPadding(0, top + dp(14), 0, bottom + dp(BOTTOM_NAV_HEIGHT_DP + 18))
-            (bottomNavigation.layoutParams as FrameLayout.LayoutParams).apply {
-                bottomMargin = bottom + dp(8)
-                bottomNavigation.layoutParams = this
-            }
-            statusBarScrim.layoutParams = statusBarScrim.layoutParams.apply { height = top }
-            navigationBarScrim.layoutParams = navigationBarScrim.layoutParams.apply { height = bottom }
-            insets
-        }
-        root.requestApplyInsets()
-    }
-
-    private fun rounded(
-        color: Int,
-        radius: Float,
-        strokeColor: Int? = null,
-        strokeWidth: Int = 0,
-    ) = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        setColor(color)
-        cornerRadius = dp(radius.toInt()).toFloat()
-        if (strokeColor != null && strokeWidth > 0) setStroke(dp(strokeWidth), strokeColor)
-    }
-
-    private fun matchWidthWrapHeight() = LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-    )
-
-    private fun toast(message: String) =
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun subtlePressAnimator(scale: Float = 0.975f) = View.OnTouchListener { view, event ->
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> view.animate()
-                .scaleX(scale).scaleY(scale).alpha(0.82f).setDuration(65).start()
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.animate()
-                .scaleX(1f).scaleY(1f).alpha(1f).setDuration(150)
-                .setInterpolator(OvershootInterpolator(1.1f)).start()
-        }
-        false
-    }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
-    private inner class NotificationHistoryAdapter(
-        private val onGroupClicked: (String) -> Unit,
-    ) : BaseAdapter() {
-        private var rows: List<HistoryListItem> = emptyList()
-        private val timeFormat = SimpleDateFormat("M月d日 HH:mm", Locale.getDefault())
-
-        fun replace(newRows: List<HistoryListItem>) {
-            rows = newRows
-            notifyDataSetChanged()
-        }
-
-        override fun getCount(): Int = rows.size
-
-        override fun getItem(position: Int): HistoryListItem = rows[position]
-
-        override fun getItemId(position: Int): Long = when (val item = getItem(position)) {
-            is HistoryListItem.Entry -> item.entry.id
-            is HistoryListItem.AppGroup -> -kotlin.math.abs(item.group.sourcePackage.hashCode().toLong()) - 1L
-        }
-
-        override fun getViewTypeCount(): Int = 2
-
-        override fun getItemViewType(position: Int): Int = when (getItem(position)) {
-            is HistoryListItem.Entry -> 0
-            is HistoryListItem.AppGroup -> 1
-        }
-
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val isNew = convertView == null
-            val view = when (val item = getItem(position)) {
-                is HistoryListItem.Entry -> bindHistoryEntry(item, convertView)
-                is HistoryListItem.AppGroup -> bindAppGroup(item, convertView)
-            }
-            if (isNew) {
-                view.alpha = 0f
-                view.translationY = dp(8).toFloat()
-                view.animate()
-                    .alpha(1f)
-                    .translationY(0f)
-                    .setStartDelay((position.coerceAtMost(5) * 20L))
-                    .setDuration(180)
-                    .setInterpolator(DecelerateInterpolator())
-                    .start()
-            }
-            return view
-        }
-
-        private fun bindHistoryEntry(item: HistoryListItem.Entry, convertView: View?): View {
-            val row = convertView ?: buildHistoryRow()
-            val holder = row.tag as HistoryRowHolder
-            val entry = item.entry
-            row.setPadding(
-                dp(if (item.nested) 24 else 15),
-                dp(if (item.nested) 11 else 13),
-                dp(15),
-                dp(if (item.nested) 11 else 13),
-            )
-            row.background = rounded(
-                if (item.nested) COLOR_STATUS_FILL else COLOR_SURFACE,
-                18f,
-                COLOR_BORDER,
-                1,
-            )
-            row.setOnClickListener(null)
-            bindHistoryIcon(holder.icon, entry.sourcePackage, entry.sourceLabel)
-            holder.source.text = entry.sourceLabel.ifBlank { entry.sourcePackage }
-            holder.time.text = timeFormat.format(Date(entry.postedAtMillis))
-            holder.title.text = entry.title
-                .takeIf(String::isNotBlank)
-                ?: entry.sourceLabel.ifBlank { "新通知" }
-            holder.body.text = entry.primaryText
-                .takeIf(String::isNotBlank)
-                ?: entry.combinedText.takeIf(String::isNotBlank)
-                ?: "通知没有可显示的正文"
-            holder.packageName.maxLines = 3
-            holder.packageName.text = "${decisionLabel(entry.decision)} · ${entry.decisionDetail}\n${entry.sourcePackage}"
-            row.setOnLongClickListener {
-                confirmDeleteHistoryEntry(entry)
-                true
-            }
-            return row
-        }
-
-        private fun bindAppGroup(item: HistoryListItem.AppGroup, convertView: View?): View {
-            val row = convertView ?: buildAppGroupRow()
-            val holder = row.tag as AppGroupRowHolder
-            val group = item.group
-            row.background = rounded(
-                if (item.expanded) COLOR_ACCENT_SOFT else COLOR_SURFACE,
-                18f,
-                if (item.expanded) COLOR_PRIMARY else COLOR_BORDER,
-                1,
-            )
-            bindHistoryIcon(holder.icon, group.sourcePackage, group.sourceLabel)
-            holder.source.text = group.sourceLabel.ifBlank { group.sourcePackage }
-            holder.count.text = "${group.notificationCount} 条通知"
-            holder.latest.text = "最近 ${timeFormat.format(Date(group.latestCapturedAtMillis))}"
-            holder.packageName.text = group.sourcePackage
-            holder.disclosure.text = if (item.expanded) "收起 ⌃" else "展开 ⌄"
-            row.setOnClickListener {
-                row.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                onGroupClicked(group.sourcePackage)
-            }
-            row.setOnLongClickListener {
-                confirmDeleteHistoryPackage(group.sourcePackage, group.sourceLabel)
-                true
-            }
-            return row
-        }
-
-        private fun buildHistoryRow(): View {
-            val row = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.TOP
-                setPadding(dp(15), dp(13), dp(15), dp(13))
-                background = rounded(COLOR_SURFACE, 18f, COLOR_BORDER, 1)
-            }
-            val icon = ImageView(this@MainActivity).apply {
-                setImageResource(android.R.drawable.sym_def_app_icon)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-            }
-            row.addView(icon, LinearLayout.LayoutParams(dp(42), dp(42)))
-            val content = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), 0, 0, 0)
-            }
-            val meta = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            val source = TextView(this@MainActivity).apply {
-                textSize = 12f
-                setTextColor(COLOR_PRIMARY)
-                setTypeface(typeface, Typeface.BOLD)
-                maxLines = 1
-            }
-            val time = TextView(this@MainActivity).apply {
-                textSize = 12f
-                setTextColor(COLOR_TEXT_TERTIARY)
-                gravity = Gravity.END
-                maxLines = 1
-            }
-            meta.addView(source, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            meta.addView(time, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ))
-            content.addView(meta, matchWidthWrapHeight())
-
-            val title = TextView(this@MainActivity).apply {
-                textSize = 16f
-                setTextColor(COLOR_TEXT_PRIMARY)
-                setTypeface(typeface, Typeface.BOLD)
-                maxLines = 2
-                setPadding(0, dp(7), 0, 0)
-            }
-            content.addView(title, matchWidthWrapHeight())
-            val body = TextView(this@MainActivity).apply {
-                textSize = 14f
-                setTextColor(COLOR_TEXT_SECONDARY)
-                maxLines = 4
-                setLineSpacing(dp(2).toFloat(), 1f)
-                setPadding(0, dp(5), 0, 0)
-            }
-            content.addView(body, matchWidthWrapHeight())
-            val packageName = TextView(this@MainActivity).apply {
-                textSize = 10f
-                setTextColor(COLOR_TEXT_TERTIARY)
-                maxLines = 1
-                setPadding(0, dp(8), 0, 0)
-            }
-            content.addView(packageName, matchWidthWrapHeight())
-            row.addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            row.tag = HistoryRowHolder(icon, source, time, title, body, packageName)
-            return row
-        }
-
-        private fun buildAppGroupRow(): View {
-            val row = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.TOP
-                setPadding(dp(16), dp(14), dp(16), dp(14))
-                setOnTouchListener(subtlePressAnimator(0.985f))
-            }
-            val icon = ImageView(this@MainActivity).apply {
-                setImageResource(android.R.drawable.sym_def_app_icon)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-            }
-            row.addView(icon, LinearLayout.LayoutParams(dp(48), dp(48)))
-            val content = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(13), 0, 0, 0)
-            }
-            val top = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            val source = TextView(this@MainActivity).apply {
-                textSize = 17f
-                setTextColor(COLOR_TEXT_PRIMARY)
-                setTypeface(typeface, Typeface.BOLD)
-                maxLines = 1
-            }
-            val count = TextView(this@MainActivity).apply {
-                textSize = 13f
-                setTextColor(COLOR_PRIMARY_DARK)
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.END
-                maxLines = 1
-            }
-            top.addView(source, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            top.addView(count, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ))
-            content.addView(top, matchWidthWrapHeight())
-
-            val detail = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(7), 0, 0)
-            }
-            val latest = TextView(this@MainActivity).apply {
-                textSize = 12f
-                setTextColor(COLOR_TEXT_SECONDARY)
-                maxLines = 1
-            }
-            val disclosure = TextView(this@MainActivity).apply {
-                textSize = 12f
-                setTextColor(COLOR_PRIMARY)
-                setTypeface(typeface, Typeface.BOLD)
-                gravity = Gravity.END
-            }
-            detail.addView(latest, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            detail.addView(disclosure, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ))
-            content.addView(detail, matchWidthWrapHeight())
-            val packageName = TextView(this@MainActivity).apply {
-                textSize = 10f
-                setTextColor(COLOR_TEXT_TERTIARY)
-                maxLines = 1
-                setPadding(0, dp(6), 0, 0)
-            }
-            content.addView(packageName, matchWidthWrapHeight())
-            row.addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            row.tag = AppGroupRowHolder(icon, source, count, latest, packageName, disclosure)
-            return row
-        }
-
-        private fun bindHistoryIcon(imageView: ImageView, packageName: String, sourceLabel: String) {
-            imageView.tag = packageName
-            imageView.contentDescription = "${sourceLabel.ifBlank { packageName }} 图标"
-            imageView.setImageResource(android.R.drawable.sym_def_app_icon)
-            synchronized(historyIconCache) { historyIconCache.get(packageName) }
-                ?.let(imageView::setImageDrawable)
-                ?: loadHistoryIcon(packageName)
-        }
-
-        private fun loadHistoryIcon(packageName: String) {
-            if (!historyIconRequests.add(packageName)) return
-            historyIconLoader.execute {
-                val icon = runCatching { packageManager.getApplicationIcon(packageName) }.getOrNull()
-                if (icon != null) synchronized(historyIconCache) { historyIconCache.put(packageName, icon) }
-                historyIconRequests.remove(packageName)
-                if (icon != null) {
-                    historyIconHandler.post {
-                        if (!isFinishing && !isDestroyed) notifyDataSetChanged()
-                    }
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HistoryTransferDialogs(
+    transferState: HistoryTransferState,
+    onConfirmImport: (Boolean) -> Unit,
+    onCancelPreview: () -> Unit,
+    onAcknowledgeResult: () -> Unit,
+) {
+    when (transferState) {
+        is HistoryTransferState.Preview -> {
+            val expired = transferState.expired > 0
+            val message = buildString {
+                append("备份共 ${transferState.metadata.count} 条记录。\n")
+                append("当前保留期限：${transferState.policy.chineseLabel()}。\n")
+                append("超过当前期限：${transferState.expired} 条。\n")
+                append("导入会保留本机历史，并跳过重复记录。")
+                if (expired) {
+                    append("\n选择导入全部会将本机历史保留期限改为永久。")
                 }
             }
+            if (expired) {
+                AlertDialog(
+                    onDismissRequest = onCancelPreview,
+                    title = { Text("导入通知历史") },
+                    text = { Text(message) },
+                    confirmButton = {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            TextButton(onClick = onCancelPreview) {
+                                Text("取消")
+                            }
+                            TextButton(onClick = { onConfirmImport(false) }) {
+                                Text("仅导入期限内记录")
+                            }
+                            TextButton(onClick = { onConfirmImport(true) }) {
+                                Text("改为永久并导入全部")
+                            }
+                        }
+                    },
+                )
+            } else {
+                AlertDialog(
+                    onDismissRequest = onCancelPreview,
+                    title = { Text("导入通知历史") },
+                    text = { Text(message) },
+                    confirmButton = {
+                        TextButton(onClick = { onConfirmImport(false) }) {
+                            Text("导入")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = onCancelPreview) {
+                            Text("取消")
+                        }
+                    },
+                )
+            }
         }
-    }
-
-    private data class HistoryRowHolder(
-        val icon: ImageView,
-        val source: TextView,
-        val time: TextView,
-        val title: TextView,
-        val body: TextView,
-        val packageName: TextView,
-    )
-
-    private data class AppGroupRowHolder(
-        val icon: ImageView,
-        val source: TextView,
-        val count: TextView,
-        val latest: TextView,
-        val packageName: TextView,
-        val disclosure: TextView,
-    )
-
-    private data class NavigationTab(
-        val root: LinearLayout,
-        val icon: ImageView,
-        val label: TextView,
-        var selected: Boolean = false,
-    )
-
-    private sealed interface HistoryListItem {
-        data class Entry(
-            val entry: NotificationHistoryEntry,
-            val nested: Boolean,
-        ) : HistoryListItem
-
-        data class AppGroup(
-            val group: NotificationHistoryAppGroup,
-            val expanded: Boolean,
-        ) : HistoryListItem
-    }
-
-    private enum class ButtonTone { PRIMARY, SECONDARY, ACCENT, QUIET }
-    private enum class Page { HOME, RULES, HISTORY, BACKEND }
-    private enum class HistorySortMode(val storageValue: String) {
-        TIME("time"),
-        APP_COUNT("app_count");
-
-        companion object {
-            fun fromStorageValue(value: String): HistorySortMode =
-                entries.firstOrNull { it.storageValue == value } ?: TIME
+        is HistoryTransferState.Finished -> {
+            AlertDialog(
+                onDismissRequest = onAcknowledgeResult,
+                title = { Text(if (transferState.success) "操作完成" else "操作失败") },
+                text = { Text(transferState.message) },
+                confirmButton = {
+                    TextButton(onClick = onAcknowledgeResult) {
+                        Text("确定")
+                    }
+                },
+            )
         }
+        else -> Unit
     }
+}
 
-    private val COLOR_PAGE get() = palette.page
-    private val COLOR_SURFACE get() = palette.surface
-    private val COLOR_SURFACE_RAISED get() = palette.surfaceRaised
-    private val COLOR_HERO get() = palette.hero
-    private val COLOR_HERO_ACCENT get() = palette.heroAccent
-    private val COLOR_HERO_SECONDARY get() = palette.heroSecondary
-    private val COLOR_PRIMARY get() = palette.primary
-    private val COLOR_PRIMARY_DARK get() = palette.accentText
-    private val COLOR_TEXT_PRIMARY get() = palette.textPrimary
-    private val COLOR_TEXT_SECONDARY get() = palette.textSecondary
-    private val COLOR_TEXT_TERTIARY get() = palette.textTertiary
-    private val COLOR_BORDER get() = palette.border
-    private val COLOR_DIVIDER get() = palette.divider
-    private val COLOR_STATUS_FILL get() = palette.statusFill
-    private val COLOR_CONTROL get() = palette.control
-    private val COLOR_ACCENT_SOFT get() = palette.accentSoft
-    private val COLOR_QUIET get() = palette.quiet
-    private val COLOR_RIPPLE get() = palette.ripple
-
-    companion object {
-        private const val HISTORY_EXPORT_REQUEST = 4101
-        private const val HISTORY_IMPORT_REQUEST = 4102
-        private const val BOTTOM_NAV_HEIGHT_DP = 72
-        private const val HISTORY_DISPLAY_LIMIT = 250
-    }
+@Composable
+private fun RuleUpdatePromptDialog(
+    manifest: VerifiedManifest,
+    onConfirmInstall: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val version = manifest.manifest.version
+    val notes = manifest.manifest.notes.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("有新的规则更新") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("官方规则版本 $version 已可用。是否立即更新？")
+                if (notes.isNotEmpty()) {
+                    Text(
+                        text = "更新说明：\n$notes",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirmInstall) {
+                Text("立即更新")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("稍后")
+            }
+        },
+    )
 }

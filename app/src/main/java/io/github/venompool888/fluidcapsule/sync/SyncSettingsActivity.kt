@@ -1,431 +1,1160 @@
 package io.github.venompool888.fluidcapsule.sync
 
-import android.animation.LayoutTransition
-import android.app.Activity
-import android.app.AlertDialog
 import android.content.Context
-import android.content.res.ColorStateList
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.text.InputType
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
-import android.view.Gravity
-import android.view.View
-import android.view.ViewGroup
-import android.view.WindowInsets
-import android.view.animation.DecelerateInterpolator
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.ScrollView
-import android.widget.Switch
-import android.widget.TextView
-import io.github.venompool888.fluidcapsule.ui.UiPalette
-import io.github.venompool888.fluidcapsule.ui.configureFluidSystemBars
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Clear
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
+import io.github.venompool888.fluidcapsule.settings.AppRule
+import io.github.venompool888.fluidcapsule.settings.AppRuleActivity
+import io.github.venompool888.fluidcapsule.settings.AppRuleStore
+import io.github.venompool888.fluidcapsule.settings.NotificationWhitelist
+import io.github.venompool888.fluidcapsule.settings.ThemeMode
+import io.github.venompool888.fluidcapsule.settings.UserSettings
+import io.github.venompool888.fluidcapsule.ui.components.ConfirmAlertDialog
+import io.github.venompool888.fluidcapsule.ui.components.RelativeTimeFormatter
+import io.github.venompool888.fluidcapsule.ui.components.RuleSummaryChips
+import io.github.venompool888.fluidcapsule.ui.components.SectionLabel
+import io.github.venompool888.fluidcapsule.ui.components.StatusBadge
+import io.github.venompool888.fluidcapsule.ui.components.StatusTone
+import io.github.venompool888.fluidcapsule.ui.components.TonalSectionCard
+import io.github.venompool888.fluidcapsule.ui.theme.FluidCapsuleTheme
+import io.github.venompool888.fluidcapsule.ui.theme.configureEdgeToEdgeForTheme
+import io.github.venompool888.fluidcapsule.ui.theme.isDarkThemeForContext
 import io.github.venompool888.fluidcapsule.ui.withFluidThemeMode
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.net.URI
+import java.util.Locale
 
-class SyncSettingsActivity : Activity() {
-    private val palette by lazy { UiPalette.from(this) }
-    private val main = Handler(Looper.getMainLooper())
-    private lateinit var content: LinearLayout
-    private lateinit var errorText: TextView
-    private var statusText: TextView? = null
-    private var devicesCard: LinearLayout? = null
-    private var renderedStateJson: String? = null
-    private var renderedDeviceState: SyncDeviceState? = null
-    private var busy = false
-    private var renderedConnected: Boolean? = null
-    private var codeMode = true
-    private var serverDraft = ""
-    private var codeDraft = ""
-    private var usernameDraft = ""
-    private val statusRefresh = object : Runnable {
-        override fun run() {
-            updateStatus()
-            if (!busy) updateDevices()
-            main.postDelayed(this, 1_000)
-        }
+private data class SyncUiSnapshot(
+    val isConnected: Boolean = false,
+    val account: String = "",
+    val server: String = "",
+    val deviceId: String = "",
+    val realtimeConnected: Boolean = false,
+    val lastError: String = "",
+    val lastSkipped: String = "",
+    val lastSkippedAt: Long = 0L,
+    val cachedStateJson: String = "",
+    val deviceState: SyncDeviceState? = null,
+    val sendableDevices: List<SyncDevice> = emptyList(),
+)
+
+class SyncSettingsActivity : ComponentActivity() {
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val snackbarHostState = SnackbarHostState()
+
+    private var themeModeState by mutableStateOf(ThemeMode.SYSTEM)
+    private var dynamicColorState by mutableStateOf(true)
+
+    private var snapshotState by mutableStateOf(SyncUiSnapshot())
+    private var syncedSmsRuleState by mutableStateOf(AppRule())
+    private var syncedSmsOtpOnlyState by mutableStateOf(false)
+
+    private var codeMode by mutableStateOf(true)
+    private var serverDraft by mutableStateOf("")
+    private var codeDraft by mutableStateOf("")
+    private var usernameDraft by mutableStateOf("")
+
+    private var connectError by mutableStateOf<String?>(null)
+    private var isConnecting by mutableStateOf(false)
+    private var isRefreshingDevices by mutableStateOf(false)
+    private var isPulling by mutableStateOf(false)
+    private var isDisconnecting by mutableStateOf(false)
+    private var pendingDeviceIds by mutableStateOf(emptySet<String>())
+    private var optimisticReceiveFrom by mutableStateOf(emptyMap<String, Boolean>())
+    private var lastPullCount by mutableStateOf<Int?>(null)
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withFluidThemeMode())
     }
-
-    override fun attachBaseContext(newBase: Context) = super.attachBaseContext(newBase.withFluidThemeMode())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        configureFluidSystemBars()
-        codeMode = savedInstanceState?.getBoolean("codeMode", true) ?: true
-        serverDraft = savedInstanceState?.getString("server").orEmpty()
-        codeDraft = savedInstanceState?.getString("code").orEmpty()
-        usernameDraft = savedInstanceState?.getString("username").orEmpty()
-        buildShell()
-        render()
+        title = "短信云同步"
+        codeMode = savedInstanceState?.getBoolean(KEY_CODE_MODE, true) ?: true
+        serverDraft = savedInstanceState?.getString(KEY_SERVER).orEmpty()
+        codeDraft = savedInstanceState?.getString(KEY_CODE).orEmpty()
+        usernameDraft = savedInstanceState?.getString(KEY_USERNAME).orEmpty()
+
+        refreshThemeAndConfig()
+        enableEdgeToEdge()
+        configureEdgeToEdgeForTheme(this, isDarkThemeForContext(this, themeModeState))
+
+        setContent {
+            FluidCapsuleTheme(
+                themeMode = themeModeState,
+                dynamicColor = dynamicColorState,
+            ) {
+                SyncSettingsScreen(
+                    snapshot = snapshotState,
+                    syncedSmsRule = syncedSmsRuleState,
+                    syncedSmsOtpOnly = syncedSmsOtpOnlyState,
+                    codeMode = codeMode,
+                    onCodeModeChange = { codeMode = it },
+                    serverDraft = serverDraft,
+                    onServerDraftChange = { serverDraft = it },
+                    codeDraft = codeDraft,
+                    onCodeDraftChange = { codeDraft = it.uppercase(Locale.ROOT) },
+                    usernameDraft = usernameDraft,
+                    onUsernameDraftChange = { usernameDraft = it },
+                    connectError = connectError,
+                    onDismissConnectError = { connectError = null },
+                    isConnecting = isConnecting,
+                    isRefreshingDevices = isRefreshingDevices,
+                    isPulling = isPulling,
+                    isDisconnecting = isDisconnecting,
+                    pendingDeviceIds = pendingDeviceIds,
+                    optimisticReceiveFrom = optimisticReceiveFrom,
+                    lastPullCount = lastPullCount,
+                    snackbarHostState = snackbarHostState,
+                    onNavigateBack = ::finish,
+                    onRefreshDevices = { refreshDevices(showFeedback = true) },
+                    onConnect = ::requestConnect,
+                    onClearLastError = {
+                        SyncConfig(this).clearLastError()
+                        refreshLocalSnapshot()
+                    },
+                    onClearLastSkipped = {
+                        SyncConfig(this).clearLastSkipped()
+                        refreshLocalSnapshot()
+                    },
+                    onOpenSyncedSmsRule = ::openSyncedSmsRule,
+                    onToggleDevice = ::toggleDeviceRoute,
+                    onPullNow = ::pullNow,
+                    onDisconnect = ::disconnectNow,
+                    onPollTick = ::refreshLocalSnapshot,
+                )
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        main.post(statusRefresh)
-        if (SyncConfig(this).isConnected) refreshDevices()
-    }
-
-    override fun onPause() {
-        main.removeCallbacks(statusRefresh)
-        super.onPause()
+        refreshThemeAndConfig()
+        if (snapshotState.isConnected) {
+            refreshDevices(showFeedback = false)
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean("codeMode", codeMode)
-        outState.putString("server", serverDraft)
-        outState.putString("code", codeDraft)
-        outState.putString("username", usernameDraft)
+        outState.putBoolean(KEY_CODE_MODE, codeMode)
+        outState.putString(KEY_SERVER, serverDraft)
+        outState.putString(KEY_CODE, codeDraft)
+        outState.putString(KEY_USERNAME, usernameDraft)
         super.onSaveInstanceState(outState)
     }
 
-    private fun buildShell() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(palette.page)
-        }
-        root.addView(label("‹  短信云同步", 24).apply {
-            minHeight = dp(56)
-            gravity = Gravity.CENTER_VERTICAL
-            setTypeface(typeface, Typeface.BOLD)
-            contentDescription = "返回，短信云同步"
-            isFocusable = true
-            background = selectableBackground()
-            setOnClickListener { finish() }
-        })
-        content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(ScrollView(this).apply {
-            isFillViewport = true
-            addView(content)
-        }, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
-        root.setOnApplyWindowInsetsListener { view, insets ->
-            val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
-            view.setPadding(dp(18), bars.top + dp(8), dp(18), bars.bottom + dp(12))
-            insets
-        }
-        root.requestApplyInsets()
+    private fun refreshThemeAndConfig() {
+        themeModeState = UserSettings.themeMode(this)
+        dynamicColorState = UserSettings.dynamicColorEnabled(this)
+        refreshLocalSnapshot()
     }
 
-    private fun render() {
-        content.removeAllViews()
-        statusText = null
-        devicesCard = null
-        renderedStateJson = null
-        renderedDeviceState = null
-        errorText = label("", 14).apply {
-            setTextColor(palette.error)
-            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
-            visibility = View.GONE
-        }
-        val connected = SyncConfig(this).isConnected
-        if (connected) renderConnected() else renderConnect()
-        // Ease in only when switching between the connect form and the connected view, not on
-        // every refresh after a route change.
-        if (renderedConnected != null && renderedConnected != connected) {
-            content.alpha = 0f
-            content.translationY = dp(12).toFloat()
-            content.animate().alpha(1f).translationY(0f).setDuration(220)
-                .setInterpolator(DecelerateInterpolator()).start()
-        }
-        renderedConnected = connected
-    }
-
-    private fun renderConnect() {
-        val card = card().apply { layoutTransition = LayoutTransition() }
-        content.addView(card, spaced())
-        content.addView(errorText, spaced())
-        card.addView(label("连接短信云同步", 19).apply { setTypeface(typeface, Typeface.BOLD) })
-        val server = field(card, "服务器地址", serverDraft, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        server.hint = "https://…"
-        val mode = RadioGroup(this).apply { orientation = RadioGroup.HORIZONTAL }
-        val enrollmentChoice = RadioButton(this).apply { id = View.generateViewId(); text = "注册码" }
-        val accountChoice = RadioButton(this).apply { id = View.generateViewId(); text = "账号密码" }
-        listOf(enrollmentChoice, accountChoice).forEach { choice ->
-            choice.setTextColor(palette.textPrimary)
-            choice.buttonTintList = ColorStateList.valueOf(palette.accentText)
-            choice.background = rounded(palette.control)
-            mode.addView(choice, LinearLayout.LayoutParams(0, dp(52), 1f))
-        }
-        card.addView(mode, spaced())
-        val enrollmentFields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val accountFields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val code = field(enrollmentFields, "注册码", codeDraft, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
-        val username = field(accountFields, "账号", usernameDraft, InputType.TYPE_CLASS_TEXT)
-        val password = field(accountFields, "密码", "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
-        card.addView(enrollmentFields)
-        card.addView(accountFields)
-        fun selectMode() {
-            enrollmentFields.visibility = if (codeMode) View.VISIBLE else View.GONE
-            accountFields.visibility = if (codeMode) View.GONE else View.VISIBLE
-        }
-        mode.check(if (codeMode) enrollmentChoice.id else accountChoice.id)
-        selectMode()
-        mode.setOnCheckedChangeListener { _, checked -> codeMode = checked == enrollmentChoice.id; selectMode() }
-        val connect = button("连接", primary = true)
-        card.addView(connect, spaced())
-        connect.setOnClickListener {
-            serverDraft = server.text.toString()
-            codeDraft = code.text.toString()
-            usernameDraft = username.text.toString()
-            val credentials = SyncCredentials(serverDraft, if (codeMode) codeDraft else "",
-                if (codeMode) "" else usernameDraft, if (codeMode) "" else password.text.toString())
-            requestConnect(credentials, connect)
-        }
-        card.addView(label("注册码在同步服务器网页的“添加设备”里生成；也可以直接用同一账号的用户名和密码。", 13, palette.textSecondary))
-    }
-
-    private fun requestConnect(credentials: SyncCredentials, connect: Button) {
-        val normalized = runCatching { SyncApi.normalizeServer(credentials.server) }
-        val server = normalized.getOrElse { showError(it); return }
-        if (codeMode && credentials.code.isBlank()) { showError(IllegalArgumentException("请输入注册码")); return }
-        connect(credentials.copy(server = server), connect)
-    }
-
-    private fun connect(credentials: SyncCredentials, connect: Button) {
-        connect.text = "连接中…"
-        connect.isEnabled = false
-        runNetwork({ SyncEngine.connect(this, credentials) }, { render() }, {
-            connect.text = "连接"
-            connect.isEnabled = true
-            // Registration may succeed before a subsequent device refresh fails.
-            if (SyncConfig(this).isConnected) render()
-            showError(it)
-        })
-    }
-
-    private fun renderConnected() {
+    private fun refreshLocalSnapshot() {
         val config = SyncConfig(this)
-        val state = config.cachedState.takeIf { it.isNotBlank() }?.let { SyncEngine.parseState(JSONObject(it)) }
-        val summary = card()
-        content.addView(summary, spaced())
-        summary.addView(label(config.account, 20).apply { setTypeface(typeface, Typeface.BOLD) })
-        summary.addView(label(URI(config.server).host, 14, palette.textSecondary))
-        summary.addView(label(state?.devices?.find { it.id == config.deviceId }?.name ?: "FluidCapsule · ${android.os.Build.MODEL}", 14))
-        statusText = label("", 14).also { summary.addView(it, spaced()) }
-        updateStatus()
-        content.addView(label("从这些设备接收短信", 18).apply { setTypeface(typeface, Typeface.BOLD) }, spaced())
-        devicesCard = card().also { content.addView(it, spaced()) }
-        updateDevices()
-        val sync = button("立即同步")
-        sync.isEnabled = !busy
-        content.addView(sync, spaced())
-        sync.setOnClickListener {
-            sync.text = "同步中…"
-            sync.isEnabled = false
-            runNetwork({ SyncEngine.pull(this) }, { count ->
-                sync.text = "已同步 $count 条 · 立即同步"
-                updateDevices()
-                updateStatus()
-            }, {
-                sync.text = "立即同步"; sync.isEnabled = true; showError(it)
-            })
+        val connected = config.isConnected
+        val cachedJson = config.cachedState
+        val previous = snapshotState
+        val parsedState = if (cachedJson == previous.cachedStateJson && previous.deviceState != null) {
+            previous.deviceState
+        } else {
+            cachedJson.takeIf { it.isNotBlank() }?.let { raw ->
+                runCatching { SyncEngine.parseState(JSONObject(raw)) }.getOrNull()
+            }
         }
-        val disconnect = button("断开连接").apply { setTextColor(palette.error); isEnabled = !busy }
-        content.addView(disconnect, spaced())
-        disconnect.setOnClickListener {
-            AlertDialog.Builder(this).setTitle("断开短信云同步？").setMessage("将清除本机连接设置和设备令牌。")
-                .setNegativeButton("取消", null).setPositiveButton("断开连接") { _, _ ->
-                    runNetwork({ SyncEngine.disconnect(this) }, { render() })
-                }.show()
-        }
+        val sendable = parsedState?.devices?.filter { device ->
+            device.id != parsedState.currentDeviceId && device.canSend
+        }.orEmpty()
+
+        snapshotState = SyncUiSnapshot(
+            isConnected = connected,
+            account = config.account,
+            server = config.server,
+            deviceId = config.deviceId,
+            realtimeConnected = connected && SyncRealtimeService.connected,
+            lastError = config.lastError,
+            lastSkipped = config.lastSkipped,
+            lastSkippedAt = config.lastSkippedAt,
+            cachedStateJson = cachedJson,
+            deviceState = parsedState,
+            sendableDevices = sendable,
+        )
+        syncedSmsRuleState = AppRuleStore.get(this, packageName)
+        syncedSmsOtpOnlyState = NotificationWhitelist.isOtpOnly(this, packageName)
     }
 
-    private fun updateDevices() {
-        val devices = devicesCard ?: return
-        val json = SyncConfig(this).cachedState
-        if (json == renderedStateJson) return
-        val state = json.takeIf { it.isNotBlank() }?.let {
-            val latest = SyncEngine.parseState(JSONObject(it))
-            // Other FluidCapsule devices only receive, so a toggle for them would do nothing.
-            latest.copy(devices = latest.devices.filter { device -> device.id != latest.currentDeviceId && device.canSend })
+    private fun requestConnect(password: String) {
+        if (isConnecting) return
+        val normalized = runCatching { SyncApi.normalizeServer(serverDraft) }
+        val server = normalized.getOrElse { error ->
+            connectError = error.message ?: error.javaClass.simpleName
+            return
         }
-        val needsRender = renderedStateJson == null || renderedDeviceState != state
-        renderedStateJson = json
-        renderedDeviceState = state
-        if (!needsRender) return
-        devices.removeAllViews()
-        when {
-            state == null -> devices.addView(label("正在获取设备…", 14))
-            state.devices.isEmpty() -> devices.addView(label("还没有其他设备。在胶囊短信的「云备份与同步」里连接同一账号后，这里会出现它。", 14, palette.textSecondary))
-            else -> state.devices.forEach { addDeviceRow(devices, it, state) }
+        val trimmedCode = codeDraft.trim().uppercase(Locale.ROOT)
+        val trimmedUsername = usernameDraft.trim()
+        if (codeMode && trimmedCode.isBlank()) {
+            connectError = "请输入注册码"
+            return
         }
+        if (!codeMode && (trimmedUsername.isBlank() || password.isEmpty())) {
+            connectError = "请输入账号和密码"
+            return
+        }
+
+        connectError = null
+        isConnecting = true
+        val credentials = SyncCredentials(
+            server = server,
+            code = if (codeMode) trimmedCode else "",
+            username = if (codeMode) "" else trimmedUsername,
+            password = if (codeMode) "" else password,
+        )
+        runSyncWork(
+            work = { SyncEngine.connect(this, credentials) },
+            onSuccess = {
+                isConnecting = false
+                lastPullCount = null
+                refreshLocalSnapshot()
+            },
+            onFailure = { error ->
+                isConnecting = false
+                refreshLocalSnapshot()
+                // Registration may succeed before a subsequent device refresh fails.
+                if (SyncConfig(this).isConnected) {
+                    showSnackbar("连接已建立，但刷新设备失败：${error.readableMessage()}")
+                } else {
+                    connectError = error.readableMessage()
+                }
+            },
+        )
     }
 
-    @Suppress("DEPRECATION")
-    private fun addDeviceRow(parent: LinearLayout, device: SyncDevice, state: SyncDeviceState) {
-        val row = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(8), 0, dp(8))
-            background = selectableBackground()
-            // The switch carries the accessible name and state; the row is just a bigger target.
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-        val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        labels.addView(label(device.name, 16))
-        labels.addView(label("${device.platformLabel} · ${relativeTime(device.lastSeenAt)}", 12, palette.textTertiary))
-        row.addView(labels, LinearLayout.LayoutParams(0, -2, 1f))
-        val toggle = Switch(this).apply {
-            minHeight = dp(48)
-            contentDescription = "从${device.name}接收短信"
-            isChecked = device.id in state.receiveFrom
-            isEnabled = !busy
-        }
-        row.addView(toggle)
-        row.setOnClickListener { if (toggle.isEnabled) toggle.toggle() }
-        parent.addView(row, LinearLayout.LayoutParams(-1, -2))
-        toggle.setOnCheckedChangeListener { _, checked ->
-            toggle.isEnabled = false
-            runNetwork({
+    private fun refreshDevices(showFeedback: Boolean) {
+        if (isRefreshingDevices || isDisconnecting || !SyncConfig(this).isConnected) return
+        isRefreshingDevices = true
+        runSyncWork(
+            work = { SyncEngine.getDeviceState(this) },
+            onSuccess = {
+                isRefreshingDevices = false
+                refreshLocalSnapshot()
+                if (showFeedback) {
+                    showSnackbar("设备列表已更新")
+                }
+            },
+            onFailure = { error ->
+                isRefreshingDevices = false
+                refreshLocalSnapshot()
+                if (showFeedback) {
+                    showSnackbar("刷新设备失败：${error.readableMessage()}")
+                }
+            },
+        )
+    }
+
+    private fun toggleDeviceRoute(device: SyncDevice, checked: Boolean) {
+        if (device.id in pendingDeviceIds || isDisconnecting) return
+        pendingDeviceIds = pendingDeviceIds + device.id
+        optimisticReceiveFrom = optimisticReceiveFrom + (device.id to checked)
+        runSyncWork(
+            work = {
                 SyncEngine.saveRoutes(this) { latest ->
                     if (checked) latest.receiveFrom + device.id else latest.receiveFrom - device.id
                 }
-            }, { render() }, {
-                // Rebuilding from the last confirmed state restores the switch without another PUT.
-                render(); showError(it)
-            })
-        }
+            },
+            onSuccess = {
+                pendingDeviceIds = pendingDeviceIds - device.id
+                optimisticReceiveFrom = optimisticReceiveFrom - device.id
+                refreshLocalSnapshot()
+            },
+            onFailure = { error ->
+                pendingDeviceIds = pendingDeviceIds - device.id
+                optimisticReceiveFrom = optimisticReceiveFrom - device.id
+                refreshLocalSnapshot()
+                showSnackbar("保存接收设备失败：${error.readableMessage()}")
+            },
+        )
     }
 
-    private fun refreshDevices() {
-        if (busy) return
-        runNetwork({ SyncEngine.getDeviceState(this) }, {
-            render()
-        })
+    private fun pullNow() {
+        if (isPulling || isDisconnecting) return
+        isPulling = true
+        runSyncWork(
+            work = { SyncEngine.pull(this) },
+            onSuccess = { count ->
+                isPulling = false
+                lastPullCount = count
+                refreshLocalSnapshot()
+                showSnackbar(if (count > 0) "已同步 $count 条新短信" else "当前没有待同步的新短信")
+            },
+            onFailure = { error ->
+                isPulling = false
+                refreshLocalSnapshot()
+                showSnackbar("同步失败：${error.readableMessage()}")
+            },
+        )
     }
 
-    private fun <T> runNetwork(work: () -> T, success: (T) -> Unit, failure: (Throwable) -> Unit = ::showError) {
-        if (busy) return
-        busy = true
-        errorText.visibility = View.GONE
-        content.isEnabled = false
-        setControlsEnabled(content, false)
+    private fun disconnectNow() {
+        if (isDisconnecting) return
+        isDisconnecting = true
+        runSyncWork(
+            work = { SyncEngine.disconnect(this) },
+            onSuccess = {
+                isDisconnecting = false
+                lastPullCount = null
+                connectError = null
+                pendingDeviceIds = emptySet()
+                optimisticReceiveFrom = emptyMap()
+                refreshLocalSnapshot()
+            },
+            onFailure = { error ->
+                isDisconnecting = false
+                refreshLocalSnapshot()
+                showSnackbar("断开连接失败：${error.readableMessage()}")
+            },
+        )
+    }
+
+    private fun openSyncedSmsRule() {
+        startActivity(AppRuleActivity.createIntent(this, packageName, "云同步短信"))
+    }
+
+    private fun <T> runSyncWork(
+        work: () -> T,
+        onSuccess: (T) -> Unit,
+        onFailure: (Throwable) -> Unit,
+    ) {
         SyncEngine.executor.execute {
             val outcome = runCatching(work)
-            main.post {
+            mainHandler.post {
                 if (isFinishing || isDestroyed) return@post
-                busy = false
-                content.isEnabled = true
-                setControlsEnabled(content, true)
-                outcome.onSuccess(success).onFailure(failure)
+                outcome.onSuccess(onSuccess).onFailure(onFailure)
             }
         }
     }
 
-    private fun setControlsEnabled(parent: ViewGroup, enabled: Boolean) {
-        for (index in 0 until parent.childCount) {
-            val child = parent.getChildAt(index)
-            child.isEnabled = enabled
-            if (child is ViewGroup) setControlsEnabled(child, enabled)
+    private fun showSnackbar(message: String) {
+        lifecycleScope.launch {
+            if (isFinishing || isDestroyed) return@launch
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(message)
         }
     }
 
-    private fun updateStatus() {
-        statusText?.apply {
-            val connected = SyncRealtimeService.connected
-            val config = SyncConfig(this@SyncSettingsActivity)
-            val error = config.lastError
-            val skipped = config.lastSkipped
-            // Only the dot carries the state colour: accent when live, amber while
-            // reconnecting after an error, muted while the first connection is made.
-            val (stateLabel, dotColor) = when {
-                connected -> "实时接收已连接" to palette.accentText
-                error.isNotBlank() -> "实时接收重连中" to palette.warning
-                else -> "正在连接实时接收" to palette.textTertiary
-            }
-            val status = SpannableStringBuilder()
-            status.append("●", ForegroundColorSpan(dotColor), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            status.append("  ").append(stateLabel)
-            if (error.isNotBlank()) {
-                status.append("\n同步错误：$error", ForegroundColorSpan(palette.error), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-            if (skipped.isNotBlank()) {
-                status.append("\n最近跳过：$skipped", ForegroundColorSpan(palette.textSecondary), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-            text = status
-            setTextColor(palette.textPrimary)
-            contentDescription = status.toString().removePrefix("●").trim()
+    private fun Throwable.readableMessage(): String = message?.takeIf { it.isNotBlank() } ?: javaClass.simpleName
+
+    companion object {
+        private const val KEY_CODE_MODE = "codeMode"
+        private const val KEY_SERVER = "server"
+        private const val KEY_CODE = "code"
+        private const val KEY_USERNAME = "username"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SyncSettingsScreen(
+    snapshot: SyncUiSnapshot,
+    syncedSmsRule: AppRule,
+    syncedSmsOtpOnly: Boolean,
+    codeMode: Boolean,
+    onCodeModeChange: (Boolean) -> Unit,
+    serverDraft: String,
+    onServerDraftChange: (String) -> Unit,
+    codeDraft: String,
+    onCodeDraftChange: (String) -> Unit,
+    usernameDraft: String,
+    onUsernameDraftChange: (String) -> Unit,
+    connectError: String?,
+    onDismissConnectError: () -> Unit,
+    isConnecting: Boolean,
+    isRefreshingDevices: Boolean,
+    isPulling: Boolean,
+    isDisconnecting: Boolean,
+    pendingDeviceIds: Set<String>,
+    optimisticReceiveFrom: Map<String, Boolean>,
+    lastPullCount: Int?,
+    snackbarHostState: SnackbarHostState,
+    onNavigateBack: () -> Unit,
+    onRefreshDevices: () -> Unit,
+    onConnect: (String) -> Unit,
+    onClearLastError: () -> Unit,
+    onClearLastSkipped: () -> Unit,
+    onOpenSyncedSmsRule: () -> Unit,
+    onToggleDevice: (SyncDevice, Boolean) -> Unit,
+    onPullNow: () -> Unit,
+    onDisconnect: () -> Unit,
+    onPollTick: () -> Unit,
+) {
+    LaunchedEffect(snapshot.isConnected) {
+        if (!snapshot.isConnected) return@LaunchedEffect
+        while (isActive) {
+            onPollTick()
+            delay(1_000L)
         }
     }
 
-    private fun showError(error: Throwable) {
-        if (statusText != null) {
-            updateStatus()
-            return
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val isBusy = isConnecting || isRefreshingDevices || isPulling || isDisconnecting || pendingDeviceIds.isNotEmpty()
+    var showDisconnectDialog by remember { mutableStateOf(false) }
+
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.surface,
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        topBar = {
+            Column {
+                TopAppBar(
+                    scrollBehavior = scrollBehavior,
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "返回，短信云同步",
+                            )
+                        }
+                    },
+                    title = {
+                        Text(
+                            text = "短信云同步",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    actions = {
+                        if (snapshot.isConnected) {
+                            IconButton(
+                                onClick = onRefreshDevices,
+                                enabled = !isRefreshingDevices && !isPulling && !isDisconnecting,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Refresh,
+                                    contentDescription = "刷新设备",
+                                )
+                            }
+                        }
+                    },
+                )
+                AnimatedVisibility(visible = isBusy) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+                .imePadding(),
+        ) {
+            AnimatedContent(
+                targetState = snapshot.isConnected,
+                label = "SyncConnectionState",
+            ) { connected ->
+                if (connected) {
+                    ConnectedSyncContent(
+                        snapshot = snapshot,
+                        syncedSmsRule = syncedSmsRule,
+                        syncedSmsOtpOnly = syncedSmsOtpOnly,
+                        isPulling = isPulling,
+                        isDisconnecting = isDisconnecting,
+                        pendingDeviceIds = pendingDeviceIds,
+                        optimisticReceiveFrom = optimisticReceiveFrom,
+                        lastPullCount = lastPullCount,
+                        onClearLastError = onClearLastError,
+                        onClearLastSkipped = onClearLastSkipped,
+                        onOpenSyncedSmsRule = onOpenSyncedSmsRule,
+                        onToggleDevice = onToggleDevice,
+                        onPullNow = onPullNow,
+                        onRequestDisconnect = { showDisconnectDialog = true },
+                    )
+                } else {
+                    DisconnectedSyncContent(
+                        codeMode = codeMode,
+                        onCodeModeChange = onCodeModeChange,
+                        serverDraft = serverDraft,
+                        onServerDraftChange = onServerDraftChange,
+                        codeDraft = codeDraft,
+                        onCodeDraftChange = onCodeDraftChange,
+                        usernameDraft = usernameDraft,
+                        onUsernameDraftChange = onUsernameDraftChange,
+                        connectError = connectError,
+                        onDismissConnectError = onDismissConnectError,
+                        isConnecting = isConnecting,
+                        onConnect = onConnect,
+                    )
+                }
+            }
         }
-        errorText.text = error.message ?: error.javaClass.simpleName
-        errorText.visibility = View.VISIBLE
     }
 
-    private fun field(parent: LinearLayout, title: String, initial: String, type: Int): EditText {
-        parent.addView(label(title, 14), spaced())
-        return EditText(this).apply {
-            // setSingleLine replaces the transformation method, so it must come before
-            // inputType or a password would show in plain text.
-            setSingleLine(true)
-            inputType = type
-            if (type and InputType.TYPE_MASK_VARIATION == InputType.TYPE_TEXT_VARIATION_PASSWORD) {
-                transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
-                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
-                setAutofillHints(View.AUTOFILL_HINT_PASSWORD)
-            }
-            setText(initial)
-            setTextColor(palette.textPrimary)
-            setHintTextColor(palette.textTertiary)
-            backgroundTintList = ColorStateList.valueOf(palette.accentText)
-            minHeight = dp(52)
-            contentDescription = title
-            addTextChangedListener(object : android.text.TextWatcher {
-                override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) {
-                    when (title) {
-                        "服务器地址" -> serverDraft = text.toString()
-                        "注册码" -> codeDraft = text.toString()
-                        "账号" -> usernameDraft = text.toString()
+    if (showDisconnectDialog) {
+        ConfirmAlertDialog(
+            title = "断开短信云同步？",
+            message = "将清除本机连接设置和设备令牌。",
+            confirmLabel = "断开连接",
+            dismissLabel = "取消",
+            isDestructive = true,
+            onConfirm = {
+                showDisconnectDialog = false
+                onDisconnect()
+            },
+            onDismiss = { showDisconnectDialog = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DisconnectedSyncContent(
+    codeMode: Boolean,
+    onCodeModeChange: (Boolean) -> Unit,
+    serverDraft: String,
+    onServerDraftChange: (String) -> Unit,
+    codeDraft: String,
+    onCodeDraftChange: (String) -> Unit,
+    usernameDraft: String,
+    onUsernameDraftChange: (String) -> Unit,
+    connectError: String?,
+    onDismissConnectError: () -> Unit,
+    isConnecting: Boolean,
+    onConnect: (String) -> Unit,
+) {
+    // Password stays in memory only and is never written into savedInstanceState.
+    var passwordDraft by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    val scheme = MaterialTheme.colorScheme
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        TonalSectionCard(containerColor = scheme.surfaceContainerLow) {
+            Text(
+                text = "连接短信云同步",
+                style = MaterialTheme.typography.titleLarge,
+                color = scheme.onSurface,
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+
+            OutlinedTextField(
+                value = serverDraft,
+                onValueChange = onServerDraftChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("服务器地址") },
+                placeholder = { Text("https://…") },
+                supportingText = { Text("需使用完整的 HTTPS 地址（调试环境环回地址除外）") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Next,
+                ),
+                shape = RoundedCornerShape(16.dp),
+                trailingIcon = {
+                    if (serverDraft.isNotEmpty()) {
+                        IconButton(onClick = { onServerDraftChange("") }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Clear,
+                                contentDescription = "清空服务器地址",
+                            )
+                        }
+                    }
+                },
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+            val modes = listOf(
+                true to "注册码",
+                false to "账号密码",
+            )
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                modes.forEachIndexed { index, (isCode, label) ->
+                    SegmentedButton(
+                        selected = codeMode == isCode,
+                        onClick = { onCodeModeChange(isCode) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = modes.size,
+                        ),
+                    ) {
+                        Text(
+                            text = label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
-                override fun afterTextChanged(text: android.text.Editable?) = Unit
-            })
-            parent.addView(this, LinearLayout.LayoutParams(-1, -2))
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            if (codeMode) {
+                OutlinedTextField(
+                    value = codeDraft,
+                    onValueChange = onCodeDraftChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("注册码") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        keyboardType = KeyboardType.Ascii,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { onConnect(passwordDraft) }),
+                    shape = RoundedCornerShape(16.dp),
+                    trailingIcon = {
+                        if (codeDraft.isNotEmpty()) {
+                            IconButton(onClick = { onCodeDraftChange("") }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Clear,
+                                    contentDescription = "清空注册码",
+                                )
+                            }
+                        }
+                    },
+                )
+            } else {
+                OutlinedTextField(
+                    value = usernameDraft,
+                    onValueChange = onUsernameDraftChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("账号") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next,
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    trailingIcon = {
+                        if (usernameDraft.isNotEmpty()) {
+                            IconButton(onClick = { onUsernameDraftChange("") }) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Clear,
+                                    contentDescription = "清空账号",
+                                )
+                            }
+                        }
+                    },
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = passwordDraft,
+                    onValueChange = { passwordDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("密码") },
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { onConnect(passwordDraft) }),
+                    shape = RoundedCornerShape(16.dp),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) {
+                                    Icons.Rounded.VisibilityOff
+                                } else {
+                                    Icons.Rounded.Visibility
+                                },
+                                contentDescription = if (passwordVisible) "隐藏密码" else "显示密码",
+                            )
+                        }
+                    },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { onConnect(passwordDraft) },
+                enabled = !isConnecting,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 50.dp),
+            ) {
+                Text(if (isConnecting) "连接中…" else "连接")
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "注册码在同步服务器网页的“添加设备”里生成；也可以直接用同一账号的用户名和密码。",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
+        }
+
+        if (!connectError.isNullOrBlank()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                shape = RoundedCornerShape(18.dp),
+                color = scheme.errorContainer,
+                contentColor = scheme.onErrorContainer,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ErrorOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = connectError,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onDismissConnectError) {
+                        Icon(
+                            imageVector = Icons.Rounded.Clear,
+                            contentDescription = "关闭错误提示",
+                        )
+                    }
+                }
+            }
         }
     }
+}
 
-    private fun relativeTime(timestamp: Long): String {
-        if (timestamp <= 0) return "尚未上线"
-        val minutes = ((System.currentTimeMillis() - timestamp).coerceAtLeast(0) / 60_000)
-        return when {
-            minutes == 0L -> "刚刚在线"
-            minutes < 60 -> "$minutes 分钟前"
-            minutes < 1_440 -> "${minutes / 60} 小时前"
-            else -> "${minutes / 1_440} 天前"
+@Composable
+private fun ConnectedSyncContent(
+    snapshot: SyncUiSnapshot,
+    syncedSmsRule: AppRule,
+    syncedSmsOtpOnly: Boolean,
+    isPulling: Boolean,
+    isDisconnecting: Boolean,
+    pendingDeviceIds: Set<String>,
+    optimisticReceiveFrom: Map<String, Boolean>,
+    lastPullCount: Int?,
+    onClearLastError: () -> Unit,
+    onClearLastSkipped: () -> Unit,
+    onOpenSyncedSmsRule: () -> Unit,
+    onToggleDevice: (SyncDevice, Boolean) -> Unit,
+    onPullNow: () -> Unit,
+    onRequestDisconnect: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val localDeviceName = remember(snapshot.deviceState, snapshot.deviceId) {
+        snapshot.deviceState?.devices?.find { it.id == snapshot.deviceId }?.name
+            ?: "FluidCapsule · ${Build.MODEL}"
+    }
+    val hostLabel = remember(snapshot.server) {
+        runCatching {
+            val uri = URI(snapshot.server)
+            val host = uri.host.orEmpty()
+            if (host.isBlank()) {
+                snapshot.server
+            } else if (uri.port != -1) {
+                "$host:${uri.port}"
+            } else {
+                host
+            }
+        }.getOrDefault(snapshot.server)
+    }
+
+    val (statusLabel, statusTone) = when {
+        snapshot.realtimeConnected -> "实时接收已连接" to StatusTone.SUCCESS
+        snapshot.lastError.isNotBlank() -> "实时接收重连中" to StatusTone.WARNING
+        else -> "正在连接实时接收" to StatusTone.NEUTRAL
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        TonalSectionCard(containerColor = scheme.surfaceContainerLow) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = snapshot.account.ifBlank { "已连接账号" },
+                        style = MaterialTheme.typography.titleLarge,
+                        color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = hostLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                StatusBadge(
+                    text = statusLabel,
+                    tone = statusTone,
+                    leadingDot = true,
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = localDeviceName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                StatusBadge(
+                    text = "只接收端",
+                    tone = StatusTone.SECONDARY,
+                )
+            }
         }
-    }
 
-    private fun label(title: String, size: Int, color: Int = palette.textPrimary) = TextView(this).apply {
-        text = title; textSize = size.toFloat(); setTextColor(color); setPadding(0, dp(4), 0, dp(4))
+        if (snapshot.lastError.isNotBlank()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                shape = RoundedCornerShape(18.dp),
+                color = scheme.errorContainer,
+                contentColor = scheme.onErrorContainer,
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.ErrorOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = "同步错误：${snapshot.lastError}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = onClearLastError,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = scheme.onErrorContainer,
+                        ),
+                    ) {
+                        Text("清除错误")
+                    }
+                }
+            }
+        }
+
+        if (snapshot.lastSkipped.isNotBlank()) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = scheme.surfaceContainerHigh,
+                contentColor = scheme.onSurface,
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Info,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = scheme.onSurfaceVariant,
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "最近跳过 · ${
+                                RelativeTimeFormatter.format(
+                                    timestampMillis = snapshot.lastSkippedAt,
+                                    emptyLabel = "时间未知",
+                                )
+                            }",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = scheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = snapshot.lastSkipped,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurface,
+                        )
+                    }
+                    TextButton(onClick = onClearLastSkipped) {
+                        Text("清除")
+                    }
+                }
+            }
+        }
+
+        TonalSectionCard(
+            modifier = Modifier
+                .clip(RoundedCornerShape(22.dp))
+                .clickable(onClick = onOpenSyncedSmsRule),
+            containerColor = scheme.surfaceContainerLow,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "云同步短信胶囊显示规则",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = scheme.onSurface,
+                    )
+                    Text(
+                        text = "调整云同步短信的停留时间、队列优先级与正文隐私显示",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = "配置云同步短信专属规则",
+                    tint = scheme.onSurfaceVariant,
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            RuleSummaryChips(rule = syncedSmsRule, otpOnly = syncedSmsOtpOnly)
+        }
+
+        SectionLabel(
+            title = "从这些设备接收短信",
+            subtitle = "仅展示可发送短信的设备（已过滤本机与其他只接收端）",
+        )
+
+        TonalSectionCard(containerColor = scheme.surfaceContainerLow) {
+            val state = snapshot.deviceState
+            val devices = snapshot.sendableDevices
+            when {
+                state == null -> {
+                    Text(
+                        text = "正在获取设备…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+                devices.isEmpty() -> {
+                    Text(
+                        text = "还没有其他设备。在胶囊短信的「云备份与同步」里连接同一账号后，这里会出现它。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+                else -> {
+                    devices.forEachIndexed { index, device ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                color = scheme.outlineVariant.copy(alpha = 0.5f),
+                            )
+                        }
+                        val checked = optimisticReceiveFrom[device.id] ?: (device.id in state.receiveFrom)
+                        val deviceBusy = device.id in pendingDeviceIds
+                        val enabled = !deviceBusy && !isDisconnecting
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 56.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable(enabled = enabled) {
+                                    onToggleDevice(device, !checked)
+                                }
+                                .padding(horizontal = 4.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(
+                                    text = device.name,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = scheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = "${device.platformLabel} · ${formatDeviceLastSeen(device.lastSeenAt)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = scheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (deviceBusy) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                            Switch(
+                                checked = checked,
+                                onCheckedChange = { newValue -> onToggleDevice(device, newValue) },
+                                enabled = enabled,
+                                modifier = Modifier.semantics {
+                                    contentDescription = "从${device.name}接收短信"
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        FilledTonalButton(
+            onClick = onPullNow,
+            enabled = !isPulling && !isDisconnecting,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 50.dp),
+        ) {
+            val label = when {
+                isPulling -> "同步中…"
+                lastPullCount != null -> "已同步 $lastPullCount 条 · 立即同步"
+                else -> "立即同步"
+            }
+            Text(label)
+        }
+
+        Button(
+            onClick = onRequestDisconnect,
+            enabled = !isDisconnecting,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = scheme.errorContainer,
+                contentColor = scheme.onErrorContainer,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 50.dp),
+        ) {
+            Text(if (isDisconnecting) "正在断开…" else "断开连接")
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
     }
-    private fun card() = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(14), dp(18), dp(14)); background = rounded(palette.surface)
-    }
-    private fun button(title: String, primary: Boolean = false) = Button(this).apply {
-        text = title; isAllCaps = false; minHeight = dp(52)
-        setTextColor(if (primary) Color.WHITE else palette.accentText)
-        backgroundTintList = ColorStateList.valueOf(if (primary) palette.primary else palette.control)
-    }
-    private fun selectableBackground() = obtainStyledAttributes(
-        intArrayOf(android.R.attr.selectableItemBackground),
-    ).let { attrs -> attrs.getDrawable(0).also { attrs.recycle() } }
-    private fun rounded(color: Int) = GradientDrawable().apply { setColor(color); cornerRadius = dp(18).toFloat() }
-    private fun spaced() = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }
-    private fun dp(size: Int): Int = (size * resources.displayMetrics.density).toInt()
+}
+
+private fun formatDeviceLastSeen(timestampMillis: Long): String {
+    if (timestampMillis <= 0L) return "尚未上线"
+    val elapsedMillis = (System.currentTimeMillis() - timestampMillis).coerceAtLeast(0L)
+    if (elapsedMillis < 60_000L) return "刚刚在线"
+    return RelativeTimeFormatter.format(timestampMillis)
 }

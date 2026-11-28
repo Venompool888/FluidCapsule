@@ -279,6 +279,50 @@ object NotificationHistoryStore {
         ).use(::readEntries)
     }
 
+    /** Searches history entries case-insensitively across app label, package, title, and body text. */
+    fun search(
+        context: Context,
+        query: String,
+        decisionFilter: String? = null,
+        limit: Int = 250,
+    ): List<NotificationHistoryEntry> {
+        val safeLimit = limit.coerceIn(1, 1_000)
+        val trimmedQuery = query.trim()
+        val trimmedDecision = decisionFilter?.trim()?.takeIf { it.isNotEmpty() }
+        val clauses = mutableListOf<String>()
+        val args = mutableListOf<String>()
+        if (trimmedQuery.isNotEmpty()) {
+            val escaped = trimmedQuery
+                .lowercase()
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            val pattern = "%$escaped%"
+            clauses += "(LOWER(app_label) LIKE ? ESCAPE '\\' OR " +
+                "LOWER(package_name) LIKE ? ESCAPE '\\' OR " +
+                "LOWER(title) LIKE ? ESCAPE '\\' OR " +
+                "LOWER(primary_text) LIKE ? ESCAPE '\\' OR " +
+                "LOWER(combined_text) LIKE ? ESCAPE '\\')"
+            repeat(5) { args += pattern }
+        }
+        if (trimmedDecision != null) {
+            clauses += "decision = ?"
+            args += trimmedDecision
+        }
+        val selection = clauses.takeIf { it.isNotEmpty() }?.joinToString(" AND ")
+        val selectionArgs = args.takeIf { it.isNotEmpty() }?.toTypedArray()
+        return database(context.applicationContext).readableDatabase.query(
+            TABLE_HISTORY,
+            ENTRY_COLUMNS,
+            selection,
+            selectionArgs,
+            null,
+            null,
+            "captured_at DESC, id DESC",
+            safeLimit.toString(),
+        ).use(::readEntries)
+    }
+
     /**
      * Reads an id-bounded, paginated export window for the protected ADB path.
      *

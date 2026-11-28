@@ -20,7 +20,14 @@ signing_password="$(security find-generic-password \
 export FLUID_CAPSULE_KEYSTORE_PASSWORD="$signing_password"
 export FLUID_CAPSULE_KEY_PASSWORD="$signing_password"
 
-JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}" \
-  ./gradlew testDebugUnitTest lintDebug assembleRelease
+if [[ -z "${JAVA_HOME:-}" ]]; then
+  if [[ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]]; then
+    export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+  elif command -v /usr/libexec/java_home >/dev/null 2>&1; then
+    export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
+  fi
+fi
+
+./gradlew testDebugUnitTest lintDebug assembleRelease
 
 unset signing_password FLUID_CAPSULE_KEYSTORE_PASSWORD FLUID_CAPSULE_KEY_PASSWORD
