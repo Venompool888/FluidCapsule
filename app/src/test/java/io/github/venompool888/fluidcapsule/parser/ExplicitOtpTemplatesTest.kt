@@ -162,6 +162,26 @@ class ExplicitOtpTemplatesTest {
         )
     }
 
+    @Test
+    fun parsesHyphenatedAlphanumericAndNewActionBoundTemplates() {
+        assertSuccess(ExplicitOtpTemplates.parse("Slack confirmation code: 7AB-C4D"), "7AB-C4D")
+        assertNull(ExplicitOtpTemplates.parse("Slack confirmation code: opt-2fa"))
+        assertNull(ExplicitOtpTemplates.parse("Slack confirmation code: PRE-PAY"))
+
+        assertSuccess(
+            ExplicitOtpTemplates.parse("Your ServiceX code to link your account to ShopY is: 482913"),
+            "482913",
+        )
+        assertSuccess(
+            ExplicitOtpTemplates.parse(
+                "Your verification code\nHello Alex\n" +
+                    "Here is the code required to complete your form on the Careers website.\nAB12C",
+            ),
+            "AB12C",
+        )
+        assertSuccess(ExplicitOtpTemplates.parse("Use code 482913 to log in"), "482913")
+    }
+
     private fun assertSuccess(result: OtpParseResult?, expectedCode: String, expectedMinutes: Int? = null) {
         assertTrue("Expected explicit OTP success but got $result", result is OtpParseResult.Success)
         result as OtpParseResult.Success

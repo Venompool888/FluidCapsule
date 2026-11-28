@@ -36,7 +36,10 @@ object OtpParser {
         RegexOption.IGNORE_CASE,
     )
     private val candidateRegex = Regex(
-        "(?<![A-Za-z0-9])([0-9]{4,8}|[A-Za-z0-9]{4,10})(?![A-Za-z0-9])",
+        "(?<![A-Za-z0-9])((?<![A-Za-z0-9-])[A-Z0-9]{3}-[A-Z0-9]{3}(?![A-Za-z0-9-])|[0-9]{4,8}|[A-Za-z0-9]{4,10})(?![A-Za-z0-9])",
+    )
+    private val nonOtpAlphanumericRegex = Regex(
+        "^(?:[0-9]{1,2}(?:st|nd|rd|th)|[0-9]{1,4}(?:am|pm|hr|hrs|min|mins|sec|secs|day|days|wk|wks|mo|mos|yr|yrs|mb|gb|tb|kb|kg|km|cm|mm|px|ms|hz|fps))$",
     )
     private val validityRegex = Regex("([0-9]{1,2})\\s*(?:分钟|min(?:ute)?s?)", RegexOption.IGNORE_CASE)
     private val moneyContextRegex = Regex(
@@ -54,8 +57,8 @@ object OtpParser {
         RegexOption.IGNORE_CASE,
     )
     private val referenceContextRegex = Regex(
-        "订单|订购|套餐|编号|流水号|参考号|快递|物流|运单|航班|预约|" +
-            "order|reference|tracking|booking|flight|subscription|plan",
+        "订单|订购|套餐|编号|流水号|参考号|快递|物流|运单|航班|预约|优惠|折扣|兑换|" +
+            "order|reference|tracking|booking|flight|subscription|plan|promo|promotional|coupon|discount|voucher|redeem",
         RegexOption.IGNORE_CASE,
     )
     private val secrecyRegex = Regex(
@@ -95,8 +98,10 @@ object OtpParser {
         val candidates = candidateRegex.findAll(normalized)
             .filter { match ->
                 val code = match.groupValues[1]
-                code.all(Char::isDigit) ||
-                    (code.any(Char::isDigit) && code.any(Char::isLetter))
+                !nonOtpAlphanumericRegex.matches(code) && when {
+                    code.contains('-') -> code.any(Char::isDigit) && code.any(Char::isLetter)
+                    else -> code.all(Char::isDigit) || (code.any(Char::isDigit) && code.any(Char::isLetter))
+                }
             }
             .mapNotNull { match ->
                 val code = match.groupValues[1]

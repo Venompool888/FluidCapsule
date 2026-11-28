@@ -133,4 +133,47 @@ class VerificationLinkParserTest {
             )?.url,
         )
     }
+
+    @Test
+    fun recognizesMagicSignInAndPasswordResetLinksAndCtas() {
+        val magicCta = VerificationLinkParser.parse(
+            "Your secure link to App is here.\n" +
+                "Click the button below to finish signing in. This link expires in 10 minutes.",
+        )
+        assertEquals(VerificationLinkRequest(url = null), magicCta)
+
+        val resetCta = VerificationLinkParser.parse(
+            "Reset your password\nTap the button below to reset your store account password.",
+        )
+        assertEquals(VerificationLinkRequest(url = null), resetCta)
+
+        val resetWithUrl = VerificationLinkParser.parse(
+            "Activate your account\n" +
+                "Please reset your password via the link https://portal.example.test/change-password/token123 to activate",
+        )
+        assertEquals("https://portal.example.test/change-password/token123", resetWithUrl?.url)
+
+        assertEquals(
+            "https://portal.example.test/magic?token=abc",
+            VerificationLinkParser.parse(
+                "请点击以下按钮完成登录：https://portal.example.test/magic?token=abc",
+            )?.url,
+        )
+        assertEquals(
+            "https://portal.example.test/reset?token=xyz",
+            VerificationLinkParser.parse(
+                "请点击以下链接重置您的密码：https://portal.example.test/reset?token=xyz。",
+            )?.url,
+        )
+    }
+
+    @Test
+    fun rejectsInformationalSecondFactorAndInPersonIdNotices() {
+        listOf(
+            "2-Step Verification turned on. When you sign in on a new device, you'll need your second factor to verify your identity.",
+            "Please make sure to bring a government issued document to verify your identity on collection.",
+            "New device login. If this wasn't you, reset your password below.",
+            "Your monthly statement is available. Please tap the link below or log in to your account and navigate to Statements.",
+        ).forEach { assertNull(it, VerificationLinkParser.parse(it)) }
+    }
 }

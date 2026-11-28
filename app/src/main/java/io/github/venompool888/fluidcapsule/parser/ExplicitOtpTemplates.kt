@@ -8,7 +8,8 @@ package io.github.venompool888.fluidcapsule.parser
  */
 object ExplicitOtpTemplates {
     private val IGNORE_CASE = RegexOption.IGNORE_CASE
-    private const val RAW_CODE = "(?:\\d{3}[-\\s]\\d{3}|\\d{4,8}|[A-Za-z0-9]{4,10})"
+    private const val RAW_CODE =
+        "(?:\\d{3}[-\\s]\\d{3}|(?<![A-Za-z0-9-])[A-Za-z0-9]{3}-[A-Za-z0-9]{3}(?![A-Za-z0-9-])|\\d{4,8}|[A-Za-z0-9]{4,10})"
 
     // Keep G outside the returned group: Google messages commonly use G-123456
     // as a transport prefix, while the OTP is the numeric part.
@@ -19,7 +20,8 @@ object ExplicitOtpTemplates {
         "(?:Uber|Boost(?:\\s+Mobile)?|Telstra|WeChat|Weixin|WhatsApp|Telegram|" +
             "Revolut|PAYTR|MEXC|Woolworths|Flybuys|Monese|Gojek|CBA|NetBank|" +
             "ING|Samsung|CoinJar|Shop|Octopus|Wise|Life360|Facebook|Instagram|" +
-            "Telekom|DoorDash|Microsoft|CoinFlip|Westpac|Swyftx|Google|Apple)"
+            "Telekom|DoorDash|Microsoft|CoinFlip|Westpac|Swyftx|Google|Apple|" +
+            "Afterpay|Slack|Meta|PayPal)"
 
     private val templates = listOf(
         // Explicit labels used by the high-volume English senders.
@@ -29,7 +31,7 @@ object ExplicitOtpTemplates {
         Regex("\\byour\\s+code\\s+for\\s+authorization[^\\n]{0,100}?[:：]\\s*$CODE", IGNORE_CASE),
         Regex("\\bfinish\\s+creating\\s+your\\s+PayID[^\\n]{0,40}?enter\\s+the\\s+code\\s+$CODE", IGNORE_CASE),
         Regex("\\byour\\s+code\\s+to\\s+transfer\\s+to\\s+Telstra\\s+is\\s+$CODE", IGNORE_CASE),
-        Regex("\\bNetCode\\b[^\\n]{0,100}?\\b(?:is|:|=)\\s*$CODE", IGNORE_CASE),
+        Regex("\\bNetCode\\b[^\\n]{0,100}?(?:\\bis(?:\\s*[:：=])?|[:：=])\\s*$CODE", IGNORE_CASE),
         Regex("\\bTelegram\\s+code\\b\\s*(?:is|:|：|-)?\\s*$CODE", IGNORE_CASE),
         Regex("\\bPAYTR\\s+code\\b\\s*(?:is|:|：|-)?\\s*$CODE", IGNORE_CASE),
         Regex("(?:\\[MEXC\\]|\\bMEXC\\b)[^\\n]{0,24}?\\bcode\\b\\s*(?:is|:|：|-)?\\s*$CODE", IGNORE_CASE),
@@ -40,7 +42,7 @@ object ExplicitOtpTemplates {
         Regex("\\b(?:use\\s+the\\s+code|(?:WeChat|Weixin)[^\\n]{0,80}?code)\\s*\\(\\s*$CODE\\s*\\)", IGNORE_CASE),
         Regex("\\(\\s*$CODE\\s*\\)\\s+code\\s+to\\s+be\\s+used\\s+once\\b", IGNORE_CASE),
         Regex("\\b(?:WeChat|Weixin)[^\\n]{0,80}?\\b(?:linking|verifying)\\s+mobile\\s+number\\s*\\(\\s*$CODE\\s*\\)", IGNORE_CASE),
-        Regex("\\b(?:WeChat|Weixin)[^\\n]{0,80}?\\b(?:code|verification)\\b[^\\n]{0,80}?\\b(?:is|:|：)\\s*$CODE", IGNORE_CASE),
+        Regex("\\b(?:WeChat|Weixin)[^\\n]{0,80}?\\b(?:code|verification)\\b[^\\n]{0,80}?(?:\\bis(?:\\s*[:：])?|[:：])\\s*$CODE", IGNORE_CASE),
 
         // Revolut's 3-3 code is intentionally normalized below.
         Regex("\\b(?:authori[sz]e\\s+a\\s+login|Revolut)[^\\n]{0,80}?\\buse\\s+code\\b\\s*(?:is|:|：|-)?\\s*$CODE", IGNORE_CASE),
@@ -75,7 +77,7 @@ object ExplicitOtpTemplates {
         ),
         Regex(
             "\\b$KNOWN_BRANDS\\b[\\s\\S]{0,240}?\\bcode\\b[^\\n]{0,80}?" +
-                "\\b(?:is|:|：)\\s*$CODE",
+                "(?:\\bis(?:\\s*[:：])?|[:：])\\s*$CODE",
             IGNORE_CASE,
         ),
         Regex(
@@ -121,6 +123,23 @@ object ExplicitOtpTemplates {
                 "\\s*(?:is|:|：)?\\s*$CODE",
             IGNORE_CASE,
         ),
+        Regex(
+            "\\byour\\s+(?:[A-Za-z0-9&.'’/-]+\\s+){0,3}code\\s+to\\s+" +
+                "(?:link|verify|confirm|log\\s*in|sign\\s*in|connect|register|reset|authori[sz]e|authenticate|complete|access)" +
+                "[^\\n]{0,80}?(?:\\bis(?:\\s*[:：])?|[:：])\\s*$CODE",
+            IGNORE_CASE,
+        ),
+        Regex(
+            "\\b(?:verification|confirmation|security|login|sign[-\\s]*in|one[-\\s]*time|single[-\\s]*use)" +
+                "\\s+code\\b[\\s\\S]{0,160}?\\bhere\\s+is\\s+(?:your|the)\\s+(?:one[-\\s]*time\\s+|verification\\s+)?code\\b" +
+                "[^\\n]{0,120}?[.!?:：\\n]\\s*$CODE",
+            IGNORE_CASE,
+        ),
+        Regex(
+            "\\b(?:use|enter)\\s+(?:the\\s+|this\\s+)?code\\s*(?:[:：]\\s*)?$CODE\\s+to\\s+" +
+                "(?:log\\s*in|sign\\s*in|verify|confirm|continue)\\b",
+            IGNORE_CASE,
+        ),
 
         // Octopus prefixes the numeric value with a fixed product marker;
         // return the numeric value itself.
@@ -131,10 +150,14 @@ object ExplicitOtpTemplates {
     private val numericSegmentRegex = Regex("\\d{3}[-\\s]\\d{3}")
     private val urlRegex = Regex("(?:https?://|www\\.)\\S+", IGNORE_CASE)
     private val nonAuthLabelRegex = Regex(
-        "(?:customer\\s+access|account|order|biller|promo|promotional|discount|coupon|" +
-            "pickup|pick-up|postal|zip|booking|reference|tracking)\\s+(?:code|number)" +
+        "(?:(?:customer\\s+access|account|order|biller|promo|promotional|discount|coupon|" +
+            "voucher|gift|referral|pickup|pick-up|postal|zip|booking|reference|tracking)\\s+(?:code|number)|" +
+            "redeem\\s+(?:your\\s+|this\\s+|the\\s+)?code)" +
             "\\s*(?:is\\s*)?[:：=-]?\\s*$",
         IGNORE_CASE,
+    )
+    private val nonOtpAlphanumericRegex = Regex(
+        "^(?:[0-9]{1,2}(?:st|nd|rd|th)|[0-9]{1,4}(?:am|pm|hr|hrs|min|mins|sec|secs|day|days|wk|wks|mo|mos|yr|yrs|mb|gb|tb|kb|kg|km|cm|mm|px|ms|hz|fps))$",
     )
 
     fun parse(text: String): OtpParseResult? {
@@ -166,6 +189,9 @@ object ExplicitOtpTemplates {
         val preceding = text.substring((group.range.first - 80).coerceAtLeast(0), group.range.first)
         if (nonAuthLabelRegex.containsMatchIn(preceding)) return null
         val raw = group.value
+        if (raw.contains('-') && !numericSegmentRegex.matches(raw)) {
+            if (raw.any(Char::isLowerCase) || !raw.any(Char::isDigit) || !raw.any(Char::isLetter)) return null
+        }
         val normalized = if (numericSegmentRegex.matches(raw)) {
             raw.filterNot { it == '-' || it.isWhitespace() }
         } else {
@@ -175,6 +201,7 @@ object ExplicitOtpTemplates {
         // The alphanumeric branch is useful for providers that mix letters
         // and digits, but never accept a plain word or a numeric phone/order
         // value outside the OTP length range.
+        if (nonOtpAlphanumericRegex.matches(normalized)) return null
         if (normalized.length !in 4..10) return null
         if (normalized.all(Char::isLetter)) return null
         if (normalized.all(Char::isDigit) && normalized.length !in 4..8) return null

@@ -297,4 +297,47 @@ class OtpParserTest {
         )
         assertEquals("482913", (result as OtpParseResult.Success).code)
     }
+
+    @Test
+    fun parsesHyphenatedAlphanumericAndNumericThreeThreeCodes() {
+        val slack = OtpParser.parse(
+            "Slack confirmation code: 7AB-C4D Enter this code to join Workspace in Slack.",
+        )
+        assertEquals("7AB-C4D", (slack as OtpParseResult.Success).code)
+
+        val whatsapp = OtpParser.parse("WhatsApp Verification Code: 482-913")
+        assertEquals("482913", (whatsapp as OtpParseResult.Success).code)
+
+        val googlePrefixed = OtpParser.parse("G-482913 is your Google verification code.")
+        assertEquals("482913", (googlePrefixed as OtpParseResult.Success).code)
+    }
+
+    @Test
+    fun parsesAccountLinkingAndDistantVerificationEmailsAndShortUseCode() {
+        val linking = OtpParser.parse(
+            "Your Afterpay code to link your account to Store.example is: 482913 " +
+                "If you did not request this code, no action is required.",
+        )
+        assertEquals("482913", (linking as OtpParseResult.Success).code)
+
+        val distant = OtpParser.parse(
+            "Your verification code\nHello Alex\n" +
+                "Here is the code required to complete your form on the Careers website.\nAB12C\n" +
+                "This email was generated because of a form submitted on the Careers website.",
+        )
+        assertEquals("AB12C", (distant as OtpParseResult.Success).code)
+
+        val shortUseCode = OtpParser.parse("Use code 482913 to log in")
+        assertEquals("482913", (shortUseCode as OtpParseResult.Success).code)
+    }
+
+    @Test
+    fun rejectsOrdinalDatesAndUnitTokensNearOtpLabels() {
+        assertEquals(
+            OtpParseResult.None,
+            OtpParser.parse("Redeem your code before October 31st TRYPROMO250"),
+        )
+        val withDuration = OtpParser.parse("Your OTP expires in 10mins: 482913")
+        assertEquals("482913", (withDuration as OtpParseResult.Success).code)
+    }
 }
