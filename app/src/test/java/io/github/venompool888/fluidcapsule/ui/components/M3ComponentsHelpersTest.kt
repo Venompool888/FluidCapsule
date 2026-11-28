@@ -81,4 +81,40 @@ class M3ComponentsHelpersTest {
         )
         assertTrue(excludeOnly.any { it.label == "排除关键词 2" && it.highlighted })
     }
+
+    @Test
+    fun summarizeRuleInlineFormatsDefaultAndCustomizedCombinations() {
+        assertEquals("默认规则 · 点击配置", summarizeRuleInline(AppRule(), otpOnly = false))
+
+        assertEquals(
+            "仅识别验证码 · 10 分钟 · 高优先级 · 始终隐藏正文 · 上限 120 字 · 关键词 含2/排1 · 不记历史",
+            summarizeRuleInline(
+                AppRule(
+                    ttlMinutes = 10,
+                    priority = 1,
+                    contentMode = AppRule.CONTENT_HIDE,
+                    maxBodyChars = 120,
+                    includeKeywords = "验证码, 登录",
+                    excludeKeywords = "广告",
+                    recordHistory = false,
+                ),
+                otpOnly = true,
+            ),
+        )
+
+        assertEquals(
+            "低优先级 · 始终显示正文 · 含词 1",
+            summarizeRuleInline(
+                AppRule(priority = -1, contentMode = AppRule.CONTENT_SHOW, includeKeywords = "登录"),
+                otpOnly = false,
+            ),
+        )
+        assertEquals(
+            "排词 2",
+            summarizeRuleInline(
+                AppRule(excludeKeywords = "广告, 营销"),
+                otpOnly = false,
+            ),
+        )
+    }
 }

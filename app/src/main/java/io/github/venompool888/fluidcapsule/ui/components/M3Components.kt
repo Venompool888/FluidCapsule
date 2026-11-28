@@ -154,6 +154,33 @@ fun summarizeRuleChips(rule: AppRule, otpOnly: Boolean): List<RuleChipSpec> {
     return chips
 }
 
+fun summarizeRuleInline(rule: AppRule, otpOnly: Boolean): String {
+    val parts = buildList {
+        if (otpOnly) add("仅识别验证码")
+        if (rule.ttlMinutes > 0) add("${rule.ttlMinutes} 分钟")
+        when (rule.priority.coerceIn(-1, 1)) {
+            1 -> add("高优先级")
+            -1 -> add("低优先级")
+        }
+        when (rule.contentMode) {
+            AppRule.CONTENT_SHOW -> add("始终显示正文")
+            AppRule.CONTENT_HIDE -> add("始终隐藏正文")
+        }
+        if (rule.maxBodyChars != AppRule.DEFAULT_MAX_BODY_CHARS) {
+            add("上限 ${rule.maxBodyChars} 字")
+        }
+        val includeCount = AppRule.keywordList(rule.includeKeywords).size
+        val excludeCount = AppRule.keywordList(rule.excludeKeywords).size
+        when {
+            includeCount > 0 && excludeCount > 0 -> add("关键词 含$includeCount/排$excludeCount")
+            includeCount > 0 -> add("含词 $includeCount")
+            excludeCount > 0 -> add("排词 $excludeCount")
+        }
+        if (!rule.recordHistory) add("不记历史")
+    }
+    return if (parts.isEmpty()) "默认规则 · 点击配置" else parts.joinToString(" · ")
+}
+
 @Composable
 fun SectionLabel(
     title: String,

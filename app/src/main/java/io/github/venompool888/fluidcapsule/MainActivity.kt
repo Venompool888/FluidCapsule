@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -150,10 +151,16 @@ class MainActivity : ComponentActivity() {
         val appsState by viewModel.appsCatalog.state.collectAsStateWithLifecycle()
         val ruleState by viewModel.ruleState.collectAsStateWithLifecycle()
         val syncSummary by viewModel.syncSummary.collectAsStateWithLifecycle()
-        val sandboxState by viewModel.sandboxState.collectAsStateWithLifecycle()
+        val settingsPermissionsFocusRequest by viewModel.settingsPermissionsFocusRequest.collectAsStateWithLifecycle()
         val historyState by viewModel.historyState.collectAsStateWithLifecycle()
         val transferState by viewModel.historyTransferState.collectAsStateWithLifecycle()
         val rawDiagnostics by viewModel.rawDiagnosticsText.collectAsStateWithLifecycle()
+        val appVersionName = remember {
+            runCatching { packageManager.getPackageInfo(packageName, 0).versionName }
+                .getOrNull()
+                .orEmpty()
+                .ifBlank { "1.5.0" }
+        }
 
         val snackbarHostState = remember { SnackbarHostState() }
         val coroutineScope = rememberCoroutineScope()
@@ -200,22 +207,13 @@ class MainActivity : ComponentActivity() {
                     historyState = historyState,
                     ruleState = ruleState,
                     syncSummary = syncSummary,
-                    sandboxState = sandboxState,
                     bottomContentPadding = bottomPadding,
                     onNavigateTab = viewModel::selectTab,
+                    onNavigateToSettingsPermissions = viewModel::navigateToSettingsPermissions,
                     onOpenSyncSettings = {
                         startActivity(Intent(this@MainActivity, SyncSettingsActivity::class.java))
                     },
-                    onRequestPostNotificationsOrOpenSettings = ::requestNotificationPermissionOrOpenSettings,
-                    onOpenPromotionSettings = { openPromotionSettingsSafely(showMessage) },
-                    onSelectSandboxPreset = viewModel::selectSandboxPreset,
-                    onToggleSandboxExpanded = viewModel::toggleSandboxExpanded,
-                    onCopySandboxOtp = { code ->
-                        showMessage(viewModel.copyTextToClipboard("验证码", code, sensitive = true))
-                    },
                     onPublishTestOtp = { showMessage(viewModel.publishTestOtp()) },
-                    onPublishTestChat = { showMessage(viewModel.publishTestChat()) },
-                    onPublishTestProgress = { showMessage(viewModel.publishTestProgress()) },
                 )
                 MainTab.APPS_AND_RULES -> AppsAndRulesScreen(
                     appsState = appsState,
@@ -268,6 +266,8 @@ class MainActivity : ComponentActivity() {
                     healthState = healthState,
                     syncSummary = syncSummary,
                     rawDiagnosticsText = rawDiagnostics,
+                    appVersionName = appVersionName,
+                    focusPermissionsRequestId = settingsPermissionsFocusRequest,
                     bottomContentPadding = bottomPadding,
                     onSelectThemeMode = viewModel::setThemeMode,
                     onToggleDynamicColor = viewModel::setDynamicColorEnabled,
@@ -300,6 +300,7 @@ class MainActivity : ComponentActivity() {
                         viewModel.refreshSyncSummary()
                         showMessage("诊断状态已刷新")
                     },
+                    onOpenGitHubRepository = { openGitHubRepository(showMessage) },
                 )
             }
         }
@@ -317,6 +318,15 @@ class MainActivity : ComponentActivity() {
                 onConfirmInstall = viewModel::installPendingRuleUpdate,
                 onDismiss = viewModel::dismissRuleUpdateDialog,
             )
+        }
+    }
+
+    private fun openGitHubRepository(showMessage: (String) -> Unit) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Venompool888/FluidCapsule"))
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            showMessage("未找到可用的浏览器打开项目仓库")
         }
     }
 

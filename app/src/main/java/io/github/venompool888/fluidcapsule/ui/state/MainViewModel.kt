@@ -62,6 +62,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 enum class MainTab(val label: String) {
@@ -96,12 +97,6 @@ enum class HistoryDecisionFilter(val label: String, val dbDecision: String?) {
     HAS_OTP("含验证码", null),
     FILTERED("已过滤", "FILTERED"),
     SKIPPED("仅记录", "SKIPPED"),
-}
-
-enum class SandboxPreset(val label: String) {
-    OTP("验证码"),
-    CHAT("微信回复"),
-    PROGRESS("美团进度"),
 }
 
 data class AppEntryUi(
@@ -179,18 +174,6 @@ data class SyncSummaryState(
     val server: String = "",
     val lastError: String = "",
     val summaryText: String = "未连接 · 接收胶囊短信从其他手机推送的短信",
-)
-
-data class SandboxPreviewState(
-    val preset: SandboxPreset = SandboxPreset.OTP,
-    val sourceLabel: String = "短信验证码",
-    val title: String = "测试验证码",
-    val shortText: String = "482913",
-    val body: String = "5 分钟内有效 · 点击复制",
-    val otpCode: String? = "482913",
-    val progress: Int? = null,
-    val expanded: Boolean = true,
-    val lastActionHint: String? = null,
 )
 
 data class HistoryUiState(
@@ -484,12 +467,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var promptedRuleVersion = 0
     private var savedStateRestored = false
     private val historyQuerySeq = AtomicLong(0L)
+    private val permissionsFocusSeq = AtomicInteger(0)
 
     val historyTransfer = NotificationHistoryTransfer(app)
     val appsCatalog = AppsCatalogController(app, viewModelScope)
 
     private val _currentTab = MutableStateFlow(MainTab.OVERVIEW)
     val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
+
+    private val _settingsPermissionsFocusRequest = MutableStateFlow(0)
+    val settingsPermissionsFocusRequest: StateFlow<Int> = _settingsPermissionsFocusRequest.asStateFlow()
 
     private val _historyTransferState = MutableStateFlow<HistoryTransferState>(HistoryTransferState.Idle)
     val historyTransferState: StateFlow<HistoryTransferState> = _historyTransferState.asStateFlow()
@@ -505,9 +492,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _syncSummary = MutableStateFlow(readSyncSummary())
     val syncSummary: StateFlow<SyncSummaryState> = _syncSummary.asStateFlow()
-
-    private val _sandboxState = MutableStateFlow(SandboxPreviewState())
-    val sandboxState: StateFlow<SandboxPreviewState> = _sandboxState.asStateFlow()
 
     private val _ruleState = MutableStateFlow(
         RuleSubscriptionUiState(
@@ -551,6 +535,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectTab(tab: MainTab) {
+        _settingsPermissionsFocusRequest.value = 0
         if (_currentTab.value == tab) return
         _currentTab.value = tab
         when (tab) {
@@ -568,6 +553,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 refreshSyncSummary()
             }
         }
+    }
+
+    fun navigateToSettingsPermissions() {
+        selectTab(MainTab.SETTINGS)
+        _settingsPermissionsFocusRequest.value = permissionsFocusSeq.incrementAndGet()
     }
 
     fun restoreSavedState(savedInstanceState: Bundle?) {
@@ -669,45 +659,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         refreshHealth()
     }
 
-    fun selectSandboxPreset(preset: SandboxPreset) {
-        _sandboxState.value = when (preset) {
-            SandboxPreset.OTP -> SandboxPreviewState(
-                preset = SandboxPreset.OTP,
-                sourceLabel = "短信验证码",
-                title = "测试验证码",
-                shortText = "482913",
-                body = "5 分钟内有效 · 点击复制",
-                otpCode = "482913",
-                progress = null,
-                expanded = true,
-            )
-            SandboxPreset.CHAT -> SandboxPreviewState(
-                preset = SandboxPreset.CHAT,
-                sourceLabel = "微信（模拟）",
-                title = "产品体验群",
-                shortText = "3条新消息",
-                body = "今晚 8 点记得发新版流体胶囊回归包，辛苦了！",
-                otpCode = null,
-                progress = null,
-                expanded = true,
-            )
-            SandboxPreset.PROGRESS -> SandboxPreviewState(
-                preset = SandboxPreset.PROGRESS,
-                sourceLabel = "美团外卖（模拟）",
-                title = "美团订单",
-                shortText = "配送中 72%",
-                body = "骑手已取餐 · 距您 350 米，预计 4 分钟送达",
-                otpCode = null,
-                progress = 72,
-                expanded = true,
-            )
-        }
-    }
-
-    fun toggleSandboxExpanded() {
-        _sandboxState.update { it.copy(expanded = !it.expanded) }
-    }
-
     fun publishTestOtp(): String {
         val now = System.currentTimeMillis()
         val showDirectly = UserSettings.showOtpDirectly(app)
@@ -727,67 +678,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 dedupeKey = "test:482913",
             ),
         )
-        selectSandboxPreset(SandboxPreset.OTP)
-        _sandboxState.update { it.copy(lastActionHint = "已发布真实测试验证码胶囊 482913") }
         refreshHealth()
-        return "已发布测试验证码胶囊 482913"
-    }
-
-    fun publishTestChat(): String {
-        val now = System.currentTimeMillis()
-        val showContent = UserSettings.showWhitelistContent(app)
-        val durationMillis = UserSettings.capsuleDisplayDurationMillis(app)
-        PublisherRouter.publish(
-            app,
-            CapsuleEvent(
-                sourcePackage = app.packageName,
-                sourceLabel = "微信（测试）",
-                smartReplies = listOf("好的没问题", "稍后回复", "收到"),
-                eventId = UUID.randomUUID().toString(),
-                kind = CapsuleKind.NOTIFICATION,
-                title = "产品体验群",
-                shortText = "产品体验群",
-                body = "今晚 8 点记得发新版流体胶囊回归包，辛苦了！",
-                action = CapsuleAction.None,
-                privacy = if (showContent) CapsulePrivacy.SHOW_FULL else CapsulePrivacy.HIDE_SENSITIVE,
-                createdAtMillis = now,
-                expiresAtMillis = now + durationMillis,
-                dedupeKey = "test:wechat",
-            ),
-        )
-        selectSandboxPreset(SandboxPreset.CHAT)
-        _sandboxState.update { it.copy(lastActionHint = "已发布真实测试微信回复胶囊") }
-        refreshHealth()
-        return "已发布测试微信回复胶囊"
-    }
-
-    fun publishTestProgress(): String {
-        val now = System.currentTimeMillis()
-        val showContent = UserSettings.showWhitelistContent(app)
-        val durationMillis = UserSettings.capsuleDisplayDurationMillis(app)
-        PublisherRouter.publish(
-            app,
-            CapsuleEvent(
-                sourcePackage = app.packageName,
-                sourceLabel = "美团外卖（测试）",
-                eventId = UUID.randomUUID().toString(),
-                kind = CapsuleKind.CUSTOM,
-                title = "美团订单",
-                shortText = "配送中",
-                body = "骑手已取餐 · 距您 350 米，预计 4 分钟送达",
-                action = CapsuleAction.None,
-                privacy = if (showContent) CapsulePrivacy.SHOW_FULL else CapsulePrivacy.HIDE_SENSITIVE,
-                createdAtMillis = now,
-                expiresAtMillis = now + durationMillis,
-                dedupeKey = "test:meituan",
-                progress = 72,
-                progressIndeterminate = false,
-            ),
-        )
-        selectSandboxPreset(SandboxPreset.PROGRESS)
-        _sandboxState.update { it.copy(lastActionHint = "已发布真实测试美团进度胶囊") }
-        refreshHealth()
-        return "已发布测试美团进度胶囊"
+        return "已发送测试验证码（482913），请看状态栏原生样式"
     }
 
     fun copyTextToClipboard(label: String, value: String, sensitive: Boolean): String {

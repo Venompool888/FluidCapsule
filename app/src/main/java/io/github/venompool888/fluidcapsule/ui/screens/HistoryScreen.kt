@@ -16,11 +16,14 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -62,8 +65,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -75,7 +76,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -130,7 +130,7 @@ fun HistoryScreen(
 ) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     var showManageSheet by remember { mutableStateOf(false) }
     var selectedEntry by remember { mutableStateOf<NotificationHistoryEntry?>(null) }
@@ -138,68 +138,79 @@ fun HistoryScreen(
     var pendingDeleteGroup by remember { mutableStateOf<NotificationHistoryAppGroup?>(null) }
     var showClearAllConfirm by remember { mutableStateOf(false) }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
+            .testTag("history_list"),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = statusBarTop + 12.dp,
+            bottom = bottomContentPadding + 20.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        TopAppBar(
-            scrollBehavior = scrollBehavior,
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = scheme.surface,
-                scrolledContainerColor = scheme.surfaceContainer,
-            ),
-            title = {
-                Column {
-                    Text(
-                        text = "通知历史",
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = "${if (historyState.recordingEnabled) "● 正在记录" else "○ 记录已关闭"} · 共 ${historyState.totalCount} 条",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = scheme.onSurfaceVariant,
-                    )
-                }
-            },
-            actions = {
-                IconButton(
-                    onClick = onTogglePrivacyBlur,
-                    modifier = Modifier.semantics {
-                        contentDescription = if (historyState.privacyBlurEnabled) "关闭隐私模糊" else "开启隐私模糊"
-                    },
+        item(key = "history_top_card") {
+            TonalSectionCard(
+                containerColor = scheme.surfaceContainerLow,
+                shape = RoundedCornerShape(20.dp),
+                contentPadding = PaddingValues(14.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(
-                        imageVector = if (historyState.privacyBlurEnabled) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
-                        contentDescription = if (historyState.privacyBlurEnabled) "隐私模糊已开启" else "隐私模糊已关闭",
-                        tint = if (historyState.privacyBlurEnabled) scheme.primary else scheme.onSurfaceVariant,
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "本地通知历史",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                        )
+                        Text(
+                            text = "${if (historyState.recordingEnabled) "● 正在记录" else "○ 记录已暂停"} · 共 ${historyState.totalCount} 条",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        IconButton(
+                            onClick = onTogglePrivacyBlur,
+                            modifier = Modifier.semantics {
+                                contentDescription = if (historyState.privacyBlurEnabled) "关闭隐私模糊" else "开启隐私模糊"
+                            },
+                        ) {
+                            Icon(
+                                imageVector = if (historyState.privacyBlurEnabled) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
+                                contentDescription = if (historyState.privacyBlurEnabled) "隐私模糊已开启" else "隐私模糊已关闭",
+                                tint = if (historyState.privacyBlurEnabled) scheme.primary else scheme.onSurfaceVariant,
+                            )
+                        }
+                        FilledTonalButton(
+                            onClick = { showManageSheet = true },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("history_manage_button"),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.SettingsBackupRestore,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("管理与备份", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
                 }
-                FilledTonalButton(
-                    onClick = { showManageSheet = true },
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    modifier = Modifier
-                        .padding(end = 12.dp)
-                        .testTag("history_manage_button"),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.SettingsBackupRestore,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("管理与备份", style = MaterialTheme.typography.labelMedium)
-                }
-            },
-        )
+            }
+        }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        item(key = "history_search") {
             OutlinedTextField(
                 value = historyState.searchQuery,
                 onValueChange = onSearchQueryChange,
@@ -218,139 +229,128 @@ fun HistoryScreen(
                 },
                 shape = CircleShape,
             )
+        }
 
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val modes = HistorySortMode.entries
-                modes.forEachIndexed { index, mode ->
-                    val label = if (mode == HistorySortMode.APP_COUNT) {
-                        val countSuffix = if (historyState.sortMode == HistorySortMode.APP_COUNT) {
-                            "(${historyState.appGroups.size})"
+        item(key = "history_sort_and_filters") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    val modes = HistorySortMode.entries
+                    modes.forEachIndexed { index, mode ->
+                        val label = if (mode == HistorySortMode.APP_COUNT) {
+                            val countSuffix = if (historyState.sortMode == HistorySortMode.APP_COUNT) {
+                                "(${historyState.appGroups.size})"
+                            } else {
+                                ""
+                            }
+                            "按软件$countSuffix"
                         } else {
-                            ""
+                            mode.label
                         }
-                        "按软件$countSuffix"
-                    } else {
-                        mode.label
+                        SegmentedButton(
+                            selected = historyState.sortMode == mode,
+                            onClick = { onSortModeChange(mode) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                            label = { Text(label, maxLines = 1) },
+                        )
                     }
-                    SegmentedButton(
-                        selected = historyState.sortMode == mode,
-                        onClick = { onSortModeChange(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-                        label = { Text(label, maxLines = 1) },
-                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    HistoryDecisionFilter.entries.forEach { filter ->
+                        FilterChip(
+                            selected = historyState.decisionFilter == filter,
+                            onClick = { onDecisionFilterChange(filter) },
+                            label = { Text(filter.label) },
+                        )
+                    }
                 }
             }
+        }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                HistoryDecisionFilter.entries.forEach { filter ->
-                    FilterChip(
-                        selected = historyState.decisionFilter == filter,
-                        onClick = { onDecisionFilterChange(filter) },
-                        label = { Text(filter.label) },
+        if (historyState.privacyBlurEnabled) {
+            item(key = "privacy_blur_banner") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = scheme.secondaryContainer,
+                    contentColor = scheme.onSecondaryContainer,
+                ) {
+                    Text(
+                        text = "已开启隐私模糊模式：列表正文已脱敏，点击条目或关闭锁图标查看原文。",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("history_list"),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = 4.dp,
-                bottom = bottomContentPadding + 20.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (historyState.privacyBlurEnabled) {
-                item(key = "privacy_blur_banner") {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        color = scheme.secondaryContainer,
-                        contentColor = scheme.onSecondaryContainer,
-                    ) {
-                        Text(
-                            text = "已开启隐私模糊模式：列表正文已脱敏，点击条目或关闭顶部锁图标查看原文。",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        )
-                    }
-                }
-            }
-
-            if (historyState.sortMode == HistorySortMode.TIME) {
-                if (historyState.timelineEntries.isEmpty()) {
-                    item(key = "history_empty_timeline") {
-                        HistoryEmptyPlaceholder(hasTotal = historyState.totalCount > 0L)
-                    }
-                } else {
-                    items(
-                        items = historyState.timelineEntries,
-                        key = { "entry:${it.id}" },
-                    ) { entry ->
-                        HistoryEntryCard(
-                            entry = entry,
-                            otpCode = historyState.entryOtps[entry.id],
-                            blurred = historyState.privacyBlurEnabled,
-                            nested = false,
-                            onClick = { selectedEntry = entry },
-                            onCopyOtp = { code -> onCopyOtp(code) },
-                        )
-                    }
+        if (historyState.sortMode == HistorySortMode.TIME) {
+            if (historyState.timelineEntries.isEmpty()) {
+                item(key = "history_empty_timeline") {
+                    HistoryEmptyPlaceholder(hasTotal = historyState.totalCount > 0L)
                 }
             } else {
-                if (historyState.appGroups.isEmpty()) {
-                    item(key = "history_empty_groups") {
-                        HistoryEmptyPlaceholder(hasTotal = historyState.totalCount > 0L)
-                    }
-                } else {
-                    items(
-                        items = historyState.appGroups,
-                        key = { "group:${it.sourcePackage}" },
-                    ) { group ->
-                        val expanded = group.sourcePackage in historyState.expandedPackages
-                        val entries = historyState.expandedGroupEntries[group.sourcePackage].orEmpty()
-                        val recordingPackage = historyState.packageRecordHistory[group.sourcePackage] ?: true
-                        AppGroupHistoryCard(
-                            group = group,
-                            expanded = expanded,
-                            entries = entries,
-                            entryOtps = historyState.entryOtps,
-                            blurred = historyState.privacyBlurEnabled,
-                            recordingPackage = recordingPackage,
-                            onToggleExpand = { onToggleAppGroup(group.sourcePackage) },
-                            onEditRule = {
-                                context.startActivity(
-                                    Intent(context, AppRuleActivity::class.java).apply {
-                                        putExtra(AppRuleActivity.EXTRA_PACKAGE, group.sourcePackage)
-                                        putExtra(AppRuleActivity.EXTRA_LABEL, group.sourceLabel)
-                                    },
-                                )
-                            },
-                            onToggleRecordPackage = {
-                                onTogglePackageRecordHistory(group.sourcePackage, !recordingPackage)
-                            },
-                            onRequestDeletePackage = {
-                                if (transferState != HistoryTransferState.Idle) {
-                                    onBlockedActionMessage("通知历史正在处理，请稍后重试")
-                                } else {
-                                    pendingDeleteGroup = group
-                                }
-                            },
-                            onSelectEntry = { selectedEntry = it },
-                            onCopyOtp = onCopyOtp,
-                        )
-                    }
+                items(
+                    items = historyState.timelineEntries,
+                    key = { "entry:${it.id}" },
+                ) { entry ->
+                    HistoryEntryCard(
+                        entry = entry,
+                        otpCode = historyState.entryOtps[entry.id],
+                        blurred = historyState.privacyBlurEnabled,
+                        nested = false,
+                        onClick = { selectedEntry = entry },
+                        onCopyOtp = { code -> onCopyOtp(code) },
+                    )
+                }
+            }
+        } else {
+            if (historyState.appGroups.isEmpty()) {
+                item(key = "history_empty_groups") {
+                    HistoryEmptyPlaceholder(hasTotal = historyState.totalCount > 0L)
+                }
+            } else {
+                items(
+                    items = historyState.appGroups,
+                    key = { "group:${it.sourcePackage}" },
+                ) { group ->
+                    val expanded = group.sourcePackage in historyState.expandedPackages
+                    val entries = historyState.expandedGroupEntries[group.sourcePackage].orEmpty()
+                    val recordingPackage = historyState.packageRecordHistory[group.sourcePackage] ?: true
+                    AppGroupHistoryCard(
+                        group = group,
+                        expanded = expanded,
+                        entries = entries,
+                        entryOtps = historyState.entryOtps,
+                        blurred = historyState.privacyBlurEnabled,
+                        recordingPackage = recordingPackage,
+                        onToggleExpand = { onToggleAppGroup(group.sourcePackage) },
+                        onEditRule = {
+                            context.startActivity(
+                                Intent(context, AppRuleActivity::class.java).apply {
+                                    putExtra(AppRuleActivity.EXTRA_PACKAGE, group.sourcePackage)
+                                    putExtra(AppRuleActivity.EXTRA_LABEL, group.sourceLabel)
+                                },
+                            )
+                        },
+                        onToggleRecordPackage = {
+                            onTogglePackageRecordHistory(group.sourcePackage, !recordingPackage)
+                        },
+                        onRequestDeletePackage = {
+                            if (transferState != HistoryTransferState.Idle) {
+                                onBlockedActionMessage("通知历史正在处理，请稍后重试")
+                            } else {
+                                pendingDeleteGroup = group
+                            }
+                        },
+                        onSelectEntry = { selectedEntry = it },
+                        onCopyOtp = onCopyOtp,
+                    )
                 }
             }
         }
